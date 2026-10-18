@@ -5,4 +5,4 @@ python-multipart>=0.0.18
 itsdangerous>=2.2,<3
 bcrypt>=4.2,<6
 docker>=7.1,<8
-segno>=1.6,<2
+segno>=1.6.6,<2
