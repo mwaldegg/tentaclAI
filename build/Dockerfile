@@ -1,6 +1,6 @@
 # tentaclai – sandbox + service gateway for Claude Code
 # Tools: Claude Code, Docker CLI + compose, git, python, node, ssh, jq, ripgrep
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 ARG CLAUDE_CODE_VERSION=latest
 
