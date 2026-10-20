@@ -1,5 +1,5 @@
 # tentacontrol – web admin for tentaclai
-FROM python:3.14-slim-bookworm
+FROM python:3.15-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DEBIAN_FRONTEND=noninteractive
 
