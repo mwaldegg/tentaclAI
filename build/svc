@@ -35,7 +35,7 @@ resolved from the stack's .env (read fresh on every call) and the container envi
   svc web [name] [--links|--raw|--login] [path]          web sources: page as readable text, links, raw HTML
   svc mail [name|address] send|folders|list|read|flag|move … mail: send (smtp), read a mailbox (imap) – svc mail for details
   svc jobs [name] [--runs N] [--steps]                    scheduled jobs: list, a definition with its recent runs
-  svc files [name] ls|tree|cat|grep|pull|diff|push [path] directories/files on SSH hosts (pull → /workspace/files/<name>)
+  svc files [name] ls|tree|cat|grep|pull|diff|push [path] files of a service with a files part (pull → /workspace/files/<name>)
 
 Privilege separation: Claude runs as user "claude" and calls svc through sudo; svc runs as root (it alone can read
 .env, the SSH keys and the service files) and starts client tools (curl, psql, mariadb, stdio MCP servers) as the

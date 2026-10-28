@@ -581,6 +581,13 @@ def test_doubled_path_prefix():
     assert svc.doubled_prefix("http://ha.local:8123", "/api/states") == ""
 
 
+def test_rules_say_svc_files_needs_a_files_service():
+    # svc files only works for services with a files part – the rules must not send Claude there for any SSH host
+    src = open(os.path.join(ROOT, "build", "claude-instructions")).read()
+    assert "prefer them, and `svc files` for file contents" not in src
+    assert "files part" in src and "`svc ssh <host> cat <path>`" in src
+
+
 def test_broken_pipe_ends_quietly(monkeypatch):
     # a closed pipe (svc audit | head) must not end in a traceback
     def closed(argv):
