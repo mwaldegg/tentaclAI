@@ -581,6 +581,19 @@ def test_doubled_path_prefix():
     assert svc.doubled_prefix("http://ha.local:8123", "/api/states") == ""
 
 
+def test_help_prints_the_usage_of_the_entry_point(monkeypatch, capsys):
+    import ast
+    doc = ast.get_docstring(ast.parse(open(os.path.join(ROOT, "build", "svc")).read()))
+    monkeypatch.setattr(svc, "USAGE", svc.USAGE)
+    for name in ("elevate", "load_env_file"):
+        monkeypatch.setattr(svc.core, name, lambda: None)
+    monkeypatch.setattr(svc.core, "load", lambda: {})
+    monkeypatch.setattr(svc, "read_entry", lambda *a: None)
+    assert svc.cli(["svc", "help"], doc) == 0
+    out = capsys.readouterr().out
+    assert "svc list" in out and "svc jobs" in out and "svc files" in out
+
+
 def test_broken_pipe_ends_quietly(monkeypatch):
     # a closed pipe (svc audit | head) must not end in a traceback
     def closed(argv):

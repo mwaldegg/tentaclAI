@@ -17,6 +17,7 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   is still a finding.
 
 ### Changes / fixes
+- Fix: `svc help`, `svc --help` and plain `svc` printed one line instead of the usage with all commands.
 - Fix: behind a reverse proxy that keeps connections open (nginx-proxy does), a request now and then failed with
   *the server closed the connection* – uvicorn dropped idle connections after 5 s while the proxy reused them for up to
   60 s. tentacontrol now keeps them 75 s.
