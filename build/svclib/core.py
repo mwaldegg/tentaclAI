@@ -248,7 +248,8 @@ def process_origin(pid, proc="/proc"):
         return {}
     out, o = {"user": user}, {}
     for chain, args in _ancestors(pid, proc):
-        out.setdefault("command", " ".join(a.decode(errors="replace") for a in args if a)[:200])
+        if "command" not in out:  # the process itself, the first in the walk
+            out["command"] = " ".join(a.decode(errors="replace") for a in args if a)[:200]
         marks = [m for m in _job_marks(args) if JOB_RE.match(m)]
         if marks:
             o = {"job": marks[0]}
