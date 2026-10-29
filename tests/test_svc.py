@@ -19,6 +19,9 @@ class _Svc:
     """svc.<name> is the name in the module that defines it – reading and monkeypatching there, so every module that
     uses it (as core.<name>, gate.<name> …) sees the patch"""
 
+    # no instance __dict__: pytest >= 9.2 takes monkeypatch's old value from it and would delattr the module's name on undo
+    __slots__ = ()
+
     def _home(self, name):
         for m in _MODULES:
             if name in vars(m) and not isinstance(vars(m)[name], type(svclib)):
@@ -39,6 +42,15 @@ class _Svc:
 
 
 svc = _Svc()
+
+
+def test_svc_proxy_survives_monkeypatch_undo():
+    """undo restores the module's value instead of deleting it (pytest >= 9.2 reads the old value from __dict__)"""
+    mp = pytest.MonkeyPatch()
+    old = svc.redact
+    mp.setattr(svc, "redact", lambda text: text)
+    mp.undo()
+    assert svc.redact is old
 
 
 @pytest.mark.parametrize("text,hidden,kept", [
