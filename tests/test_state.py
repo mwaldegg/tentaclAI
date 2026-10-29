@@ -154,8 +154,8 @@ def test_second_service_from_a_template_gets_own_variables(app_module):
     from app import services_store as s
     names = ("tok1", "tok2", "tok-three", "tokrepo")
     try:
-        s.create("tok1", "tokapi")
-        s.create("tok2", "tokapi")
+        assert s.create("tok1", "tokapi") == "a key and a secret (TOKAPI_KEY, TOKAPI_SECRET)"
+        assert s.create("tok2", "tokapi") == "a key and a secret (TOK2_KEY, TOK2_SECRET)"  # the hint names its own variables
         s.create("tok-three", "tokapi")
         s.create("tokrepo", "tokgit")
         auth = lambda n: json.loads(s.read_raw(n))["api"]["auth"]
