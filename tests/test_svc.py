@@ -122,6 +122,7 @@ def test_origin_from_the_kept_variables(monkeypatch):
     """only the checked values of the four kept variables – never the session access token"""
     import subprocess
     monkeypatch.setattr(svc, "_origin", None)
+    monkeypatch.setattr(svc, "_job", {})  # not a scheduled job, even when the tests run in one
     monkeypatch.setattr(svc, "via_sudo", lambda: True)
     monkeypatch.setattr(svc, "as_user", lambda *a, **k: {})
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "369797fa-acf1-46dc-9752-e0a7fdab4d35")
@@ -137,6 +138,7 @@ def test_origin_from_the_kept_variables(monkeypatch):
 
 def test_origin_drops_bad_values(monkeypatch):
     monkeypatch.setattr(svc, "_origin", None)
+    monkeypatch.setattr(svc, "_job", {})
     monkeypatch.setattr(svc, "via_sudo", lambda: True)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "<script>")
     monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "cli; rm -rf /")
