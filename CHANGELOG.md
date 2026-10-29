@@ -57,6 +57,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - Jobs: a proposed command with leading spaces is stored as it was checked, no longer cut at the end (#43).
 - Jobs: the proposal prompt also names balanced quotes, svc ssh with a command and no svc db shell – rules a proposal
   was refused for without knowing them (#44).
+- Services: the setup hint of a second service from the same template (e.g. PatchMon) names that service's own
+  variables instead of the first one's (#54).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):

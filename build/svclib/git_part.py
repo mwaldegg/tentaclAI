@@ -115,10 +115,10 @@ def configure_repo(name, path, git):
         claude_git(["config", "http.sslVerify", "false"], path)
     else:
         claude_git(["config", "--unset", "http.sslVerify"], path, quiet=True)
-    author = git.get("author") if isinstance(git.get("author"), dict) else {}
-    if author.get("name") and author.get("email"):  # this repo's commit author – else GIT_USER_NAME/EMAIL (global)
-        claude_git(["config", "user.name", str(author["name"])], path)
-        claude_git(["config", "user.email", str(author["email"])], path)
+    author = tclib.git_author(git)
+    if author:  # this repo's commit author – else GIT_USER_NAME/EMAIL (global)
+        claude_git(["config", "user.name", author[0]], path)
+        claude_git(["config", "user.email", author[1]], path)
         claude_git(["config", "tentaclai.author", "true"], path)
     elif claude_git(["config", "--get", "tentaclai.author"], path, quiet=True).returncode == 0:
         for key in ("user.name", "user.email", "tentaclai.author"):  # only what svc set itself
