@@ -49,4 +49,4 @@ sys.path.insert(0, "/usr/local/lib/tentaclai")
 from svclib.cli import cli  # noqa: E402
 
 if __name__ == "__main__":
-    sys.exit(cli(sys.argv))
+    sys.exit(cli(sys.argv, __doc__))

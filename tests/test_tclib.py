@@ -540,3 +540,15 @@ def test_audit_view_network_process():
     v = tclib.audit_view(e)
     assert v["process"] == "python w.py (claude)" and v["attempts"] == 12 and v["source"] == "claude-rc"
     assert tclib.audit_view(dict(e, attempts=1))["attempts"] == ""
+
+
+def test_audit_query_filters_on_the_network_process_fields():
+    """the filter/exclude links of a network entry (process, requested, attempts) are search keys"""
+    e = tclib.audit_entry("network", "x.example.com:443", "connect", "denied", actor="claude", process="curl https://x", process_user="claude",
+                          requested="2026-10-29T10:00:00.000+01:00", attempts=3)
+    v = tclib.audit_view(e)
+    for key in ("process", "requested", "attempts"):
+        value = tclib.audit_query_str([(False, key, str(v[key]).lower())])
+        assert not tclib.audit_fails(e, v, tclib.audit_query(value)), value
+        assert tclib.audit_fails(e, v, tclib.audit_query("-" + value)) == {key}, value
+        assert tclib.audit_unknown_keys(value) == []

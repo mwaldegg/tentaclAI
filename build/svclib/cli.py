@@ -10,6 +10,8 @@ import tclib  # shared with tentacontrol (lib/tclib.py)
 from . import (api_part, catalog, config_part, core, db_part, docker_part, files_part, gate, git_part, jobs_part,
     mail_part, mcp_part, safeguards, ssh_part, web_part)
 
+USAGE = __doc__  # the usage is the docstring of the entry point build/svc, which hands it to cli()
+
 
 def cmd_rc_env():
     """the remote-control settings (no secrets) for rc-loop, which runs as Claude and can't read .env"""
@@ -34,7 +36,7 @@ def main(argv):
     services = core.load()
     SERVICE_NAMES.update(services)
     if len(argv) < 2 or argv[1] in ("-h", "--help", "help"):
-        print(__doc__.strip())
+        print(USAGE.strip())
         return 0
     cmd = argv[1]
     if cmd == "list":
@@ -91,7 +93,7 @@ def main(argv):
         return git_part.cmd_git_credential(services, argv[2], argv[3])
     if len(argv) >= 4:
         return api_part.cmd_call(services, argv[1], argv[2], argv[3], argv[4:])
-    print(__doc__.strip())
+    print(USAGE.strip())
     return 1
 
 
@@ -153,7 +155,9 @@ def run(argv):
     return rc
 
 
-def cli(argv):
+def cli(argv, usage=None):
+    global USAGE
+    USAGE = usage or USAGE
     try:
         return run(argv)
     except BrokenPipeError:  # output piped into head & co., which stopped reading – end quietly like other CLI tools
