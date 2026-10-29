@@ -227,7 +227,8 @@ def variable_users():
 
 def _own_variables(data, name):
     """a second service of the same kind (same parts) gets its own variables instead of silently sharing the first one's
-    tokens: PATCHMON_TOKEN_KEY → PATCHMON_SKYNET_TOKEN_KEY. Different kinds keep sharing (e.g. GH_TOKEN for api and git)."""
+    tokens: PATCHMON_TOKEN_KEY → PATCHMON_SKYNET_TOKEN_KEY. Different kinds keep sharing (e.g. GH_TOKEN for api and git).
+    Returns the data and the renames (old → new name, for the setup hint)."""
     kinds = {k for k in PARTS if k in data}
     taken = {}
     for other in tclib.load_services(SERVICES_DIR).values():
@@ -235,7 +236,7 @@ def _own_variables(data, name):
         for v in variables({k: x for k, x in other.items() if k in PARTS}):
             taken[v] = taken.get(v, False) or same
     up = name.upper().replace("-", "_")
-    text = json.dumps(data, ensure_ascii=False)
+    text, renames = json.dumps(data, ensure_ascii=False), {}
     for v in sorted(variables({k: x for k, x in data.items() if k in PARTS})):
         if not taken.get(v) or v.startswith(up + "_"):
             continue
@@ -243,7 +244,8 @@ def _own_variables(data, name):
         while new in taken:
             new += "_2"
         text = text.replace("${" + v + "}", "${" + new + "}")
-    return json.loads(text)
+        renames[v] = new
+    return json.loads(text), renames
 
 
 MAIL_ADDRESS = tclib.MAIL_ADDRESS
@@ -325,7 +327,9 @@ def create(name, template="", address=""):
     setup = setup.replace("{{DOMAIN}}", domain).replace("svc NAME ", f"svc {name} ").replace("EXAMPLE_", f"{up}_")
     text = json.dumps(tpl, ensure_ascii=False).replace("svc NAME ", f"svc {name} ").replace(" NAME ", f" {name} ").replace("svc docker NAME", f"svc docker {name}").replace("{{DOMAIN}}", domain)
     text = text.replace("EXAMPLE_", f"{up}_").replace('"example"', f'"{name}"')
-    data = _own_variables(json.loads(text), name)
+    data, renames = _own_variables(json.loads(text), name)
+    for v, new in renames.items():  # the hint names the variables this service uses, not the first one's
+        setup = re.sub(rf"\b{re.escape(v)}\b", new, setup)
     if address and is_mailbox(data):
         _set_address(data, address)
     data = {"name": name, **{k: v for k, v in data.items() if k != "name"}}

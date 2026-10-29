@@ -48,7 +48,7 @@ def _stack():
     with open(os.path.join(STACK, "services", "_templates", "demoapi.json"), "w") as f:
         json.dump({"_meta": {"title": "Demo"}, "api": {"base_url": "https://x"}, "test_path": "/items?limit=1"}, f)
     with open(os.path.join(STACK, "services", "_templates", "tokapi.json"), "w") as f:
-        json.dump({"api": {"base_url": "https://tok.{{DOMAIN}}", "auth": {"type": "basic", "user": "${TOKAPI_KEY}", "password": "${TOKAPI_SECRET}"}}}, f)
+        json.dump({"_meta": {"setup": "a key and a secret (TOKAPI_KEY, TOKAPI_SECRET)"}, "api": {"base_url": "https://tok.{{DOMAIN}}", "auth": {"type": "basic", "user": "${TOKAPI_KEY}", "password": "${TOKAPI_SECRET}"}}}, f)
     with open(os.path.join(STACK, "services", "_templates", "tokgit.json"), "w") as f:
         json.dump({"git": {"url": "https://git.{{DOMAIN}}/r.git", "auth": {"type": "token", "token": "${TOKAPI_KEY}"}}}, f)
     os.makedirs(os.path.join(STACK, "data", "control", "mcp-tools"), exist_ok=True)
