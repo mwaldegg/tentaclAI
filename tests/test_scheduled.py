@@ -313,6 +313,7 @@ def test_propose_prompt_lists_every_rule_of_check_action(sj):
     for text in (sj.SYSTEM_PROPOSE, sj.ACTIONS_SCHEMA["items"]["properties"]["command"]["description"]):
         assert "500 characters" in text and "backslash" in text and "`" in text and "one line" in text
         assert all(c in text for c in ";&|$<>") and all(f"svc {r}" in text or f" {r}" in text for r in sj.ACTION_REFUSED)
+        assert "balanced quotes" in text and "svc ssh always with a command" in text and "no svc db shell" in text
     assert sj.ACTIONS_SCHEMA["items"]["properties"]["command"]["maxLength"] == 500
 
 

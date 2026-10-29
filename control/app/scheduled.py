@@ -53,7 +53,8 @@ ACTION_MAX = 500
 ACTION_BAD = re.compile(r"[;&|`$<>\n\\]")
 ACTION_REFUSED = {"config", "sync", "mcp-proxy", "git-credential", "git-push-hook", "jobs", "pending", "audit", "help"}
 ACTION_RULES = (f"at most {ACTION_MAX} characters, one line, none of ; & | ` $ < > or a backslash (so no \\n or \\\" "
-                f"escapes in a JSON body), no svc {', '.join(sorted(ACTION_REFUSED))}")  # what check_action enforces
+                f"escapes in a JSON body), balanced quotes, no svc {', '.join(sorted(ACTION_REFUSED))}, svc ssh always "
+                "with a command, no svc db shell")  # what check_action enforces
 ACTIONS_SCHEMA = {"type": "array", "maxItems": 10, "description": "proposed actions – only when the task asks for them",
                   "items": {"type": "object", "additionalProperties": False, "required": ["title", "command"], "properties": {
                       "title": {"type": "string", "description": "what it does and why, one line"},
