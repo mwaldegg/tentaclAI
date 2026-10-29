@@ -144,7 +144,7 @@ def is_json(text):
     try:
         json.loads(text)
         return True
-    except ValueError:
+    except (ValueError, RecursionError):  # deeply nested input must not stop the guard before its warning
         return False
 
 
