@@ -909,7 +909,7 @@ def test_tc_guard_pdf_page_findings(monkeypatch):
 def test_tc_guard_pdfs_share_one_time_budget_and_keep_the_note(monkeypatch):
     guard = _tc_guard()
     budgets, reports = [], []
-    clock = iter(range(100, 200, 4))  # every PDF takes 4 s
+    clock = iter(range(100, 200))  # every PDF takes 1 s, so the later ones are read
     monkeypatch.setattr(guard.time, "monotonic", lambda: next(clock))
 
     def pages(b64, seconds):
@@ -931,7 +931,7 @@ def test_tc_guard_pdfs_share_one_time_budget_and_keep_the_note(monkeypatch):
     monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(json.dumps(
         {"tool_name": "mcp__x__get", "tool_input": {}, "tool_response": pdf})))
     assert guard.main() == 0
-    assert budgets == [guard.PDF_SECONDS - 4, guard.PDF_SECONDS - 8, guard.PDF_SECONDS - 12]  # what is left of one budget
+    assert budgets == [guard.PDF_SECONDS - 1, guard.PDF_SECONDS - 2, guard.PDF_SECONDS - 3]  # what is left of one budget
     assert reports[0]["note"] == "PDF text not checked"  # the unreadable first PDF is not cleared by the readable second
 
 
