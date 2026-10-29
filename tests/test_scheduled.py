@@ -467,7 +467,8 @@ def test_svc_jobs_group(monkeypatch, tmp_path, capsys):
     jp = importlib.import_module("svclib.jobs_part")
     (tmp_path / "jobs.json").write_text(json.dumps({
         "spam-a": {"name": "Spam A", "group": "Spam handling", "schedule": {"kind": "manual"}},
-        "disk": {"name": "Disk", "schedule": {"kind": "manual"}}}))
+        "disk": {"name": "Disk", "schedule": {"kind": "manual"}},
+        "watch": {"name": "Watch", "group": "Überwachung", "schedule": {"kind": "manual"}}}))
     monkeypatch.setattr(jp, "JOBS_DIR", str(tmp_path))
     assert jp.cmd_jobs(["--group", "spam HANDLING"]) == 0
     out = capsys.readouterr().out
@@ -475,4 +476,5 @@ def test_svc_jobs_group(monkeypatch, tmp_path, capsys):
     assert jp.cmd_jobs([]) == 0
     out = capsys.readouterr().out
     assert "Group" in out and "Spam handling" in out and out.index("spam-a") < out.index("disk")  # groups first, none last
+    assert out.index("watch") < out.index("disk")  # also a group starting with a non-ASCII letter
     assert jp.cmd_jobs(["--group", "nope"]) == 0 and "No jobs in the group" in capsys.readouterr().out
