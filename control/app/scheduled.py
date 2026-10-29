@@ -607,9 +607,10 @@ def tabs(rows):
         return []
     out = []
     for g in names:
-        lights = [_light(r["last_run"]) for r in rows if (r.get("group") or "") == g and r.get("last_run")]
+        mine = [r for r in rows if (r.get("group") or "") == g]
+        lights = [_light(r["last_run"]) for r in mine if r.get("last_run")]
         worst = "alert" if "alert" in lights else "warn" if "warn" in lights else ""
-        out.append((g, sum(1 for r in rows if (r.get("group") or "") == g), worst, lights.count(worst) if worst else 0))
+        out.append((g, len(mine), worst, lights.count(worst) if worst else 0))
     return out
 
 

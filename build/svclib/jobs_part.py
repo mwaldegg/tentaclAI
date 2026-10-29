@@ -56,8 +56,7 @@ def cmd_jobs(args):
         w = max(len(x) for x in jobs) + 2
         tabs = any(j.get("group") for j in jobs.values()) and group is None
         g = max([len(j.get("group") or "") for j in jobs.values()] + [5]) + 2 if tabs else 0
-        print(f"{'Name':<{w}}{'Group':<{g}}{'Schedule':<24}{'Profile':<11}{'On':<5}Last run" if tabs else
-              f"{'Name':<{w}}{'Schedule':<24}{'Profile':<11}{'On':<5}Last run")
+        print(f"{'Name':<{w}}{'Group' if tabs else '':<{g}}{'Schedule':<24}{'Profile':<11}{'On':<5}Last run")
         for jid, j in sorted(jobs.items(), key=lambda kv: ((kv[1].get("group") or "~").lower(), kv[0])):
             runs = [r for r in hist if r.get("job") == jid]
             print(f"{jid:<{w}}{(j.get('group') or '–') if tabs else '':<{g}}{tclib.schedule_text(j.get('schedule')):<24}"
