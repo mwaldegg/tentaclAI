@@ -455,6 +455,8 @@ def test_job_tabs(sj, monkeypatch, tmp_path):
     assert sj.set_group(c, "Ops") == "Ops" and sj.set_group(b, "") == "" and sj.groups() == ["Ops", "Spam handling"]
     with pytest.raises(ValueError, match="40"):
         sj.set_group(a, "x" * 41)
+    with pytest.raises(ValueError, match="reserved"):
+        sj.set_group(a, " * ")  # the All tab's value
     rows = [{"group": "Ops", "last_run": {"status": "done", "result": {"status": "warn"}}},
             {"group": "Ops", "last_run": {"status": "failed"}}, {"group": "", "last_run": None},
             {"group": "B", "last_run": {"status": "done", "result": {"status": "ok"}}}]
