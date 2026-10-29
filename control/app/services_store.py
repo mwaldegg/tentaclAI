@@ -73,10 +73,10 @@ def git_info(name, git):
     path = git.get("path") or f"/workspace/repos/{name}"
     host_path = path.replace("/workspace", os.path.join(STACK_DIR, "workspace"), 1) if path.startswith("/workspace") else None
     cloned = bool(host_path and os.path.isdir(os.path.join(host_path, ".git")))
-    author = git.get("author") if isinstance(git.get("author"), dict) else {}
+    author = tclib.git_author(git)
     return {"url": git.get("url", ""), "access": tclib.access(git.get("access")), "branch": git.get("branch", ""),
             "path": path, "cloned": cloned, "auth": (git.get("auth") or {}).get("type", "none"),
-            "author": f"{author['name']} <{author['email']}>" if author.get("name") and author.get("email") else ""}
+            "author": "{} <{}>".format(*author) if author else ""}
 
 
 MCP_TOOLS_DIR = os.path.join(DATA_DIR, "mcp-tools")  # written by svc's MCP proxy at each tools/list

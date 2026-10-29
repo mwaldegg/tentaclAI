@@ -338,6 +338,12 @@ def access(value, default="read"):
     return mode if mode in ACCESS else "read"
 
 
+def git_author(git):
+    """the commit author a git part sets for its working copy – (name, email), or None without both"""
+    author = git.get("author") if isinstance(git.get("author"), dict) else {}
+    return (str(author["name"]), str(author["email"])) if author.get("name") and author.get("email") else None
+
+
 def part_default(part):
     """the access a service part has without an explicit one: smtp asks, api writes, everything else reads"""
     return {"smtp": "confirm", "api": "write"}.get(part, "read")
