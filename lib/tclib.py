@@ -1195,10 +1195,10 @@ AUDIT_OUTCOMES = ("ok", "approved", "started", "flagged", "denied", "blocked", "
 AUDIT_FIELDS = ("outcome", "actor", "type", "target", "source", "user", "approver")  # the facets, in this order
 AUDIT_KEYS = {"actor": "actor", "user": "user", "source": "source", "type": "type", "target": "target",
               "action": "action", "outcome": "outcome", "decision": "decision", "mode": "mode", "ip": "ip", "approver": "approver", "grant": "grant",
-              "reason": "reason", "cid": "cid",
+              "reason": "reason", "cid": "cid", "process": "process", "requested": "requested", "attempts": "attempts",
               "category": "type", "service": "target"}  # search keys (category/service: the stored names)
 AUDIT_SEARCH_KEYS = ("actor", "user", "source", "type", "target", "action", "outcome", "decision", "mode", "ip", "approver",
-                     "grant", "reason", "cid")  # the search keys to name in a hint (without the stored aliases)
+                     "grant", "reason", "cid", "process", "requested", "attempts")  # the search keys to name in a hint (without the stored aliases)
 _AUDIT_TOKEN = re.compile(r'(-?)([A-Za-z_]+):"([^"]*)"|(-?)([A-Za-z_]+):(\S+)|(-?)"([^"]*)"|(-?)(\S+)')
 
 
