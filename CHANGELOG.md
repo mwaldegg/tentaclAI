@@ -24,6 +24,12 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   60 s. tentacontrol now keeps them 75 s.
 - Logs → Audit: each row shows its source (session, terminal, job, host) under the actor – a click filters by it.
 - Logs → Audit CSV export: new columns at the end – `cid`, `process`, `requested`, `attempts`.
+- Fix: `svc help`, `svc --help` and plain `svc` printed one line instead of the usage with all commands.
+- Jobs with *Propose actions*: the prompt and the schema now name every rule a proposed command must follow (500
+  characters, one line, no backslash or backtick, the refused svc commands), and a refused proposal names its reason
+  (e.g. *invalid: longer than 500 characters*, *invalid: contains ;*). A too long command is checked as a whole, not cut first.
+- Fix: Logs → Audit: *filter* / *exclude* on a network entry's `process`, `requested` or `attempts` found nothing and
+  named the field unknown – they are search keys now.
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
