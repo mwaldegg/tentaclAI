@@ -25,6 +25,7 @@ SKIP_READ = ("/etc/tentaclai/", "/home/claude/.claude/", "/workspace/CLAUDE.md",
 PDFTOTEXT = "/usr/bin/pdftotext"  # poppler-utils
 PDF_PAGES, PDF_SECONDS, PDF_TEXT = 50, 5, 200_000  # the hook has 10 s
 FILE_KEYS = ("base64", "data", "blob")  # where a result carries a file: Read {"file": {"base64", "type"}}, MCP {"data"|"blob", "mimeType"}
+B64 = re.compile(r"[A-Za-z0-9+/=\r\n]*")  # a file's base64 – no spaces, so a sentence never passes as one
 SVC_ONLY = re.compile(r"\s*(?:sudo\s+(?:-n\s+)?)?svc\s[^;&|`$<>()\n]*")  # one svc call, nothing chained or substituted
 
 
@@ -32,14 +33,17 @@ def _media(d):
     return str(d.get("mimeType") or d.get("media_type") or d.get("type") or "").lower()
 
 
-def is_file(d, key):
-    """a file in a result: Read's "base64", or "data"/"blob" next to a media type of an image or a document"""
+def is_file(d, key, read=False):
+    """a file in a result: "base64" in Read's file result, or "base64"/"data"/"blob" next to a media type of an image,
+    audio, video or a PDF – and only when the value looks like base64 (a claimed media type is text from the result)"""
     m = _media(d)
-    return key == "base64" or key in ("data", "blob") and (m.startswith(("image/", "audio/", "video/")) or m == "application/pdf")
+    typed = m.startswith(("image/", "audio/", "video/")) or m == "application/pdf"
+    return (typed or read and key == "base64") and B64.fullmatch(d[key]) is not None
 
 
-def text_of(value, limit=400_000):
-    """(all strings of a tool result up to limit characters, the files in it as [(media type, base64)])"""
+def text_of(value, limit=400_000, read=False):
+    """(all strings of a tool result up to limit characters, the files in it as [(media type, base64)]) – read: the
+    result of Read, whose "base64" is the file Claude reads"""
     out, files, size = [], [], 0
     stack = [value]
     while stack and size < limit:
@@ -48,10 +52,9 @@ def text_of(value, limit=400_000):
             out.append(v)
             size += len(v)
         elif isinstance(v, dict):
-            for k, x in v.items():
-                if isinstance(x, str) and k in FILE_KEYS and is_file(v, k):
-                    files.append((_media(v), x))
-            stack.extend(reversed([x for k, x in v.items() if not (isinstance(x, str) and k in FILE_KEYS and is_file(v, k))]))
+            keys = [k for k, x in v.items() if isinstance(x, str) and k in FILE_KEYS and is_file(v, k, read)]
+            files.extend((_media(v), v[k]) for k in keys)
+            stack.extend(reversed([x for k, x in v.items() if k not in keys]))
         elif isinstance(v, list):
             stack.extend(reversed(v))
     return "\n".join(out)[:limit], files
@@ -107,7 +110,7 @@ def main():
     findings, note = [], ""
     if "--no-scan" not in sys.argv[1:] and SCAN.fullmatch(tool) and not (
             tool == "Read" and str(tin.get("file_path", "")).startswith(SKIP_READ)):  # tentaclAI's own instructions name svc commands on purpose
-        text, files = text_of(event.get("tool_response"))
+        text, files = text_of(event.get("tool_response"), read=tool == "Read")
         if text and GUARD_LINE not in text:
             findings = tclib.injection_findings(text)
         pdf_path = tool == "Read" and str(tin.get("file_path", "")).lower().endswith(".pdf")
