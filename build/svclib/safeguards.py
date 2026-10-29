@@ -183,7 +183,7 @@ def scanned(source, name, part, action, cmd, **kw):
     return rc
 
 
-TOOL_NOTES = ("PDF text not checked",)  # what tc-guard may add to an entry – nothing else is taken from the report
+TOOL_NOTES = ("PDF text not checked", "PDF text partly checked")  # what tc-guard may add to an entry – nothing else is taken from the report
 
 
 def cmd_tool_report(args, services=None):

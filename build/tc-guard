@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, "/usr/local/lib/tentaclai")
 
@@ -23,7 +24,8 @@ GUARD_LINE = "⚠ svc: possible prompt injection"  # svc already scanned and war
 SCAN = re.compile(r"WebFetch|WebSearch|Read|Bash|mcp__.*")  # tools whose results can carry someone else's text
 SKIP_READ = ("/etc/tentaclai/", "/home/claude/.claude/", "/workspace/CLAUDE.md", "/workspace/SERVICES.md")
 PDFTOTEXT = "/usr/bin/pdftotext"  # poppler-utils
-PDF_PAGES, PDF_SECONDS, PDF_TEXT = 50, 5, 200_000  # the hook has 10 s
+PDF_PAGES, PDF_SECONDS, PDF_TEXT = 50, 6, 200_000  # PDF_SECONDS for all PDFs of a result together – the hook has 10 s
+PDF_NOTES = ("PDF text not checked", "PDF text partly checked")  # the worse one first
 FILE_KEYS = ("base64", "data", "blob")  # where a result carries a file: Read {"file": {"base64", "type"}}, MCP {"data"|"blob", "mimeType"}
 SVC_ONLY = re.compile(r"\s*(?:sudo\s+(?:-n\s+)?)?svc\s[^;&|`$<>()\n]*")  # one svc call, nothing chained or substituted
 
@@ -57,9 +59,11 @@ def text_of(value, limit=400_000):
     return "\n".join(out)[:limit], files
 
 
-def pdf_pages(b64):
-    """the text of a PDF's pages (pdftotext, first PDF_PAGES pages) – None when it can't be read (no tool, encrypted,
-    broken, too slow); a scanned PDF gives empty pages"""
+def pdf_pages(b64, seconds=PDF_SECONDS):
+    """(the text of a PDF's pages – pdftotext, first PDF_PAGES pages –, whether there was more) – None when it can't be
+    read (no tool, encrypted, broken, too slow, no time left); a scanned PDF gives empty pages"""
+    if seconds <= 0:
+        return None
     try:
         data = base64.b64decode(b64, validate=False)
     except ValueError:
@@ -68,28 +72,30 @@ def pdf_pages(b64):
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        r = subprocess.run([PDFTOTEXT, "-q", "-l", str(PDF_PAGES), "-enc", "UTF-8", path, "-"], capture_output=True,
-                           timeout=PDF_SECONDS)
+        r = subprocess.run([PDFTOTEXT, "-q", "-l", str(PDF_PAGES + 1), "-enc", "UTF-8", path, "-"], capture_output=True,
+                           timeout=seconds)
         if r.returncode != 0:
             return None
-        return r.stdout[:PDF_TEXT].decode("utf-8", "replace").split("\f")
+        pages = r.stdout[:PDF_TEXT].decode("utf-8", "replace").split("\f")  # every page ends with \f
+        return pages[:PDF_PAGES], len(r.stdout) > PDF_TEXT or len(pages) > PDF_PAGES + 1
     except (OSError, subprocess.SubprocessError):
         return None
     finally:
         os.unlink(path)
 
 
-def pdf_findings(tclib, b64):
-    """(findings with the page in the excerpt, note) – note says when the text could not be checked"""
-    pages = pdf_pages(b64)
-    if pages is None:
-        return [], "PDF text not checked"
+def pdf_findings(tclib, b64, seconds=PDF_SECONDS):
+    """(findings with the page in the excerpt, note) – note says when the text could not be checked, or only in part"""
+    got = pdf_pages(b64, seconds)
+    if got is None:
+        return [], PDF_NOTES[0]
+    pages, cut = got
     found = []
     for n, page in enumerate(pages, 1):
         for reason, excerpt in tclib.injection_findings(page):
             if reason not in (r for r, _ in found):
                 found.append((reason, f"PDF page {n}, {excerpt}"))
-    return found[:5], ""
+    return found[:5], PDF_NOTES[1] if cut else ""
 
 
 def main():
@@ -111,10 +117,13 @@ def main():
         if text and GUARD_LINE not in text:
             findings = tclib.injection_findings(text)
         pdf_path = tool == "Read" and str(tin.get("file_path", "")).lower().endswith(".pdf")
+        deadline, notes = time.monotonic() + PDF_SECONDS, set()
         for media, b64 in files:
             if media == "application/pdf" or media == "pdf" or pdf_path and not media.startswith("image/"):
-                more, note = pdf_findings(tclib, b64)
+                more, n = pdf_findings(tclib, b64, deadline - time.monotonic())
+                notes.add(n)
                 findings = (findings + [f for f in more if f[0] not in (r for r, _ in findings)])[:5]
+        note = next((n for n in PDF_NOTES if n in notes), "")
     if findings:
         reasons = [r for r, _ in findings]
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": (
