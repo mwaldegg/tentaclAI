@@ -747,7 +747,7 @@ def parse_output(out):
         for x in (so.get("actions") or [])[:10] if isinstance(so.get("actions"), list) else []:
             if not isinstance(x, dict):
                 continue
-            command = str(x.get("command", ""))
+            command = str(x.get("command", "")).strip()  # stored as check_action measures it
             item = {"title": str(x.get("title", ""))[:200], "command": command[:ACTION_MAX], "state": "proposed"}
             try:
                 check_action(command)  # the whole command – cut to the limit it could pass and run as something else

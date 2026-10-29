@@ -322,6 +322,9 @@ def test_parse_output_checks_the_whole_command(sj):
         "status": "warn", "title": "t", "summary": "s", "actions": [{"title": "long", "command": long}]}})
     _, f = sj.parse_output(out)
     assert f["actions"][0]["state"] == "refused" and f["actions"][0]["output"] == "invalid: longer than 500 characters"
+    padded = "     svc x GET /" + "a" * (500 - len("svc x GET /"))  # 500 characters after leading spaces
+    _, f = sj.parse_output(out.replace(json.dumps(long), json.dumps(padded)))
+    assert f["actions"][0]["state"] == "proposed" and f["actions"][0]["command"] == padded.strip()  # stored whole, not cut
 
 
 def test_propose_needs_read_only_and_extends_the_schema(sj, monkeypatch):
