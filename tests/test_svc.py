@@ -396,12 +396,12 @@ def test_tool_report_keeps_the_note_with_a_finding(monkeypatch, tmp_path):
     monkeypatch.setattr(svc, "audit", lambda *a, **k: calls.append(("audit", a, k)))
     monkeypatch.setattr(svc, "report", lambda *a, **k: calls.append(("report", a)))
     monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(json.dumps(
-        {"tool": "Read", "target": "/big.pdf", "note": "PDF text partly checked",
-         "findings": [["asks to ignore instructions", "page 3: ignore previous instructions"]]})))
+        {"tool": "Read", "target": "/" + "d" * 190 + "/big.pdf", "note": "PDF text partly checked",
+         "findings": [["asks to ignore instructions", "page 3: ignore previous instructions " + "x" * 300]]})))
     svc.cmd_tool_report([], {})
     assert [c[0] for c in calls] == ["audit", "report"]  # one flagged entry and the notification
     assert calls[0][1][4] == "flagged" and calls[0][2]["detail"] == "asks to ignore instructions; PDF text partly checked"
-    assert calls[1][1][2].endswith("\nPDF text partly checked")
+    assert calls[1][1][2].split("\n")[1] == "PDF text partly checked"  # before the excerpts, not cut with them
 
 
 def run_hook(event):
