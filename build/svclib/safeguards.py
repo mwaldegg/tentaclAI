@@ -113,8 +113,9 @@ def guard_text(text, limit):
     return text[:limit]
 
 
-def guard_note(source, name, part, action, findings):
-    """audit (decision "flagged", with an excerpt per finding) and notify – once per source/service/action/reasons in GUARD_QUIET"""
+def guard_note(source, name, part, action, findings, note=""):
+    """audit (decision "flagged", with an excerpt per finding) and notify – once per source/service/action/reasons in GUARD_QUIET;
+    a note (tc-guard's "PDF text not checked") goes on both after the findings"""
     reasons = [r for r, _ in findings]
     key = hashlib.sha256(f"{source}|{name}|{action}|{'|'.join(reasons)}".encode()).hexdigest()[:16]
     try:
@@ -134,9 +135,9 @@ def guard_note(source, name, part, action, findings):
     except OSError:
         pass
     excerpts = [(r, guard_text(x, 300)) for r, x in findings if x]
-    gate.audit(name, part, "read", f"{source}: {action}", "flagged", detail="; ".join(reasons), excerpts=excerpts)
+    gate.audit(name, part, "read", f"{source}: {action}", "flagged", detail="; ".join(reasons + [note] if note else reasons), excerpts=excerpts)
     gate.report("injection", f"Possible prompt injection: {name} ({source})",
-           "\n".join([action] + [f"– {r}: {x}" for r, x in excerpts] + [r for r, x in findings if not x])[:500])
+           "\n".join([action] + [f"– {r}: {x}" for r, x in excerpts] + [r for r, x in findings if not x] + ([note] if note else []))[:500])
     return True
 
 
@@ -204,7 +205,7 @@ def cmd_tool_report(args, services=None):
                 if isinstance(f, list) and len(f) == 2 and isinstance(f[0], str) and (f[0] in known or str(f[0]).startswith("hidden text ("))][:5]
     target = guard_text(d.get("target", ""), 200)
     note = d.get("note") if d.get("note") in TOOL_NOTES else ""
-    if findings and guard_on() and guard_note("tool result", tool, "claude", target or "call", findings):
+    if findings and guard_on() and guard_note("tool result", tool, "claude", target or "call", findings, note=note):
         return 0
     server = tool.split("__")[1] if tool.startswith("mcp__") and tool.count("__") >= 2 else ""
     if server and "mcp" in ((services or {}).get(server) or {}):

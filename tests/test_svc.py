@@ -353,7 +353,7 @@ def test_tool_report_takes_only_known_reasons(monkeypatch):
     import io
     got, logged = [], []
     monkeypatch.setattr(svc, "ENV", {})
-    monkeypatch.setattr(svc, "guard_note", lambda *a: got.append(a) or True)
+    monkeypatch.setattr(svc, "guard_note", lambda *a, **k: got.append(a) or True)
     monkeypatch.setattr(svc, "audit", lambda *a, **k: logged.append((a, k)))
     def report(d):
         monkeypatch.setattr(svc.sys, "stdin", io.StringIO(json.dumps(d)))
@@ -387,6 +387,21 @@ def test_guard_note_keeps_excerpts_without_secrets(monkeypatch, tmp_path):
     body = calls[1][1][2]
     assert body.startswith("Read /workspace/notes.md\n– asks to ignore instructions: line 4:") and "s3cr3t" not in body
     assert body.endswith("long base64 block")
+
+
+def test_tool_report_keeps_the_note_with_a_finding(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(svc, "GUARD_STATE", str(tmp_path / "guard.json"))
+    monkeypatch.setattr(svc, "ENV", {})
+    monkeypatch.setattr(svc, "audit", lambda *a, **k: calls.append(("audit", a, k)))
+    monkeypatch.setattr(svc, "report", lambda *a, **k: calls.append(("report", a)))
+    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(json.dumps(
+        {"tool": "Read", "target": "/big.pdf", "note": "PDF text partly checked",
+         "findings": [["asks to ignore instructions", "page 3: ignore previous instructions"]]})))
+    svc.cmd_tool_report([], {})
+    assert [c[0] for c in calls] == ["audit", "report"]  # one flagged entry and the notification
+    assert calls[0][1][4] == "flagged" and calls[0][2]["detail"] == "asks to ignore instructions; PDF text partly checked"
+    assert calls[1][1][2].endswith("\nPDF text partly checked")
 
 
 def run_hook(event):
