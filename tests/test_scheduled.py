@@ -1,6 +1,7 @@
 """Claude → Jobs: schedules, the claude command line per profile, reading the answer, when to notify."""
 import json
 import os
+import re
 import time
 
 import pytest
@@ -295,6 +296,32 @@ def test_check_action(sj, cmd, ok):
     else:
         with pytest.raises(ValueError):
             sj.check_action(cmd)
+
+
+@pytest.mark.parametrize("cmd,reason", [
+    ("svc github POST /x -d '" + "a" * 500 + "'", "invalid: longer than 500 characters"),
+    ("svc mail box move 1 Junk; rm x", "invalid: contains ;"), ("svc x POST /y -d '{\"a\":\"b\\nc\"}'", "invalid: contains a backslash"),
+    ("svc x GET `id`", "invalid: contains `"), ("svc x GET /a\nb", "invalid: contains a line break"),
+])
+def test_check_action_names_the_reason(sj, cmd, reason):
+    with pytest.raises(ValueError, match="^" + re.escape(reason) + "$"):
+        sj.check_action(cmd)
+
+
+def test_propose_prompt_lists_every_rule_of_check_action(sj):
+    # the model must know what check_action refuses – otherwise its proposals end up refused without a reason it knew
+    for text in (sj.SYSTEM_PROPOSE, sj.ACTIONS_SCHEMA["items"]["properties"]["command"]["description"]):
+        assert "500 characters" in text and "backslash" in text and "`" in text and "one line" in text
+        assert all(c in text for c in ";&|$<>") and all(f"svc {r}" in text or f" {r}" in text for r in sj.ACTION_REFUSED)
+    assert sj.ACTIONS_SCHEMA["items"]["properties"]["command"]["maxLength"] == 500
+
+
+def test_parse_output_checks_the_whole_command(sj):
+    long = "svc x GET /" + "a" * 600
+    out = json.dumps({"type": "result", "subtype": "success", "is_error": False, "structured_output": {
+        "status": "warn", "title": "t", "summary": "s", "actions": [{"title": "long", "command": long}]}})
+    _, f = sj.parse_output(out)
+    assert f["actions"][0]["state"] == "refused" and f["actions"][0]["output"] == "invalid: longer than 500 characters"
 
 
 def test_propose_needs_read_only_and_extends_the_schema(sj, monkeypatch):

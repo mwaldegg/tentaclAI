@@ -47,23 +47,32 @@ SCHEMA = {"type": "object", "additionalProperties": False, "required": ["status"
     "title": {"type": "string", "description": "one line, e.g. '2 certificates expire within 14 days'"},
     "summary": {"type": "string", "description": "at most three sentences"},
     "details": {"type": "string", "description": "optional details (Markdown)"}}}
+ACTION_TTL = 24 * 3600
+ACTION_MAX = 500
+ACTION_BAD = re.compile(r"[;&|`$<>\n\\]")
+ACTION_REFUSED = {"config", "sync", "mcp-proxy", "git-credential", "git-push-hook", "jobs", "pending", "audit", "help"}
+ACTION_RULES = (f"at most {ACTION_MAX} characters, one line, none of ; & | ` $ < > or a backslash (so no \\n or \\\" "
+                f"escapes in a JSON body), no svc {', '.join(sorted(ACTION_REFUSED))}")  # what check_action enforces
 ACTIONS_SCHEMA = {"type": "array", "maxItems": 10, "description": "proposed actions – only when the task asks for them",
                   "items": {"type": "object", "additionalProperties": False, "required": ["title", "command"], "properties": {
                       "title": {"type": "string", "description": "what it does and why, one line"},
-                      "command": {"type": "string", "description": "exactly one svc command, e.g. svc mail box move 912 Junk – no pipes, ; or $"}}}}
+                      "command": {"type": "string", "maxLength": ACTION_MAX,
+                                  "description": "exactly one svc command, e.g. svc mail box move 912 Junk – " + ACTION_RULES}}}}
 SYSTEM_PROPOSE = (" This job proposes instead of acting: do not change anything; put each change you recommend into "
-                  "\"actions\" as one plain svc command (no pipes, ;, &, $ or redirects; no svc config) with a one-line title. "
+                  f"\"actions\" as one plain svc command ({ACTION_RULES}) with a one-line title – any other is refused. "
                   "The user picks which ones run later – exactly as written. Propose only what the task asks for.")
-ACTION_TTL = 24 * 3600
-ACTION_BAD = re.compile(r"[;&|`$<>\n\\]")
-ACTION_REFUSED = {"config", "sync", "mcp-proxy", "git-credential", "git-push-hook", "jobs", "pending", "audit", "help"}
 
 
 def check_action(command):
     """a proposed command → argv, or ValueError: one svc call, no shell syntax, nothing interactive"""
     command = (command or "").strip()
-    if not command or len(command) > 500 or ACTION_BAD.search(command):
-        raise ValueError("not a single plain svc command")
+    if not command:
+        raise ValueError("invalid: empty")
+    if len(command) > ACTION_MAX:
+        raise ValueError(f"invalid: longer than {ACTION_MAX} characters")
+    bad = ACTION_BAD.search(command)
+    if bad:
+        raise ValueError("invalid: contains " + {"\n": "a line break", "\\": "a backslash"}.get(bad.group(), bad.group()))
     try:
         argv = shlex.split(command)
     except ValueError:
@@ -731,9 +740,10 @@ def parse_output(out):
         for x in (so.get("actions") or [])[:10] if isinstance(so.get("actions"), list) else []:
             if not isinstance(x, dict):
                 continue
-            item = {"title": str(x.get("title", ""))[:200], "command": str(x.get("command", ""))[:500], "state": "proposed"}
+            command = str(x.get("command", ""))
+            item = {"title": str(x.get("title", ""))[:200], "command": command[:ACTION_MAX], "state": "proposed"}
             try:
-                check_action(item["command"])
+                check_action(command)  # the whole command – cut to the limit it could pass and run as something else
             except ValueError as e:
                 item.update(state="refused", output=str(e))
             acts.append(item)

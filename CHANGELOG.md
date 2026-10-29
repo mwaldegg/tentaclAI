@@ -17,6 +17,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   is still a finding.
 
 ### Changes / fixes
+- Jobs with *Propose actions*: the prompt and the schema now name every rule a proposed command must follow (500
+  characters, one line, no backslash or backtick, the refused svc commands), and a refused proposal names its reason
+  (e.g. *invalid: longer than 500 characters*, *invalid: contains ;*). A too long command is checked as a whole, not cut first.
 - Fix: behind a reverse proxy that keeps connections open (nginx-proxy does), a request now and then failed with
   *the server closed the connection* – uvicorn dropped idle connections after 5 s while the proxy reused them for up to
   60 s. tentacontrol now keeps them 75 s.
