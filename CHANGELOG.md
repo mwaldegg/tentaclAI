@@ -49,6 +49,14 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   prompt injection again.
 - Sandbox rules and `svc help`: `svc files` reads files only of a service with a files part – on a plain SSH or Docker
   host the rules now point to `svc ssh <host> cat <path>` instead.
+- tc-guard: all PDFs of a tool result share one 6 s budget for `pdftotext` (before: 5 s each, so several slow PDFs
+  could exceed the 10 s hook timeout and lose the audit entry); an unreadable PDF keeps *PDF text not checked* even
+  when a later one reads fine, and a scan cut at 50 pages or 200k characters notes *PDF text partly checked* (#38).
+- Injection guard: output with deeply nested JSON no longer stops svc's guard before its warning, audit entry and
+  notification (#42).
+- Jobs: a proposed command with leading spaces is stored as it was checked, no longer cut at the end (#43).
+- Jobs: the proposal prompt also names balanced quotes, svc ssh with a command and no svc db shell – rules a proposal
+  was refused for without knowing them (#44).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
