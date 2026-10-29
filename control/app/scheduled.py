@@ -579,6 +579,8 @@ def clean_group(value):
     g = " ".join(str(value or "").split())
     if len(g) > 40:
         raise ValueError("group: max. 40 characters")
+    if g == "*":  # the All tab's value (/jobs?tab=*)
+        raise ValueError("group: * is reserved for the All tab")
     return next((x for x in groups() if x.lower() == g.lower()), g)
 
 
