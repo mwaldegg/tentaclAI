@@ -30,6 +30,11 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   (e.g. *invalid: longer than 500 characters*, *invalid: contains ;*). A too long command is checked as a whole, not cut first.
 - Fix: Logs → Audit: *filter* / *exclude* on a network entry's `process`, `requested` or `attempts` found nothing and
   named the field unknown – they are search keys now.
+- tc-guard: a `base64`/`data`/`blob` value in a tool result is skipped as a file only in Read's file result or next to
+  an image/audio/video/PDF media type, and only when it looks like base64 – other text under these keys is scanned for
+  prompt injection again.
+- Sandbox rules and `svc help`: `svc files` reads files only of a service with a files part – on a plain SSH or Docker
+  host the rules now point to `svc ssh <host> cat <path>` instead.
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
