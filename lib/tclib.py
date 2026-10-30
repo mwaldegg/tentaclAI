@@ -887,7 +887,7 @@ INJECTION_PATTERNS = [
         r"(<\|im_(start|end)\|>|\[/?INST\]|<<SYS>>|</?(system|instructions?|assistant|user_query|function_calls|antml:[a-z_]+)>"
         r"|\"role\"\s*:\s*\"system\"|^(Human|Assistant):\s)", _I)),
     ("addresses an AI agent", re.compile(
-        r"\b(as an? (ai|llm|language model|assistant|agent)|dear (ai|assistant|agent|claude)|(hey|hi|attention),? (claude|ai|assistant|agent))\b"
+        r"\b(as an? (ai|llm|language model)|as an? (assistant|agent),? you|dear (ai|assistant|agent|claude)|(hey|hi|attention),? (claude|ai|assistant|agent))\b"
         r"|^\s*claude[,:]", _I)),
     ("addresses an AI agent", re.compile(  # notes for whoever reads this with an AI – plain documents never talk like that
         r"\b(notes?|message|instructions?|info|reminder) (to|for) (any |all )?(ai|llm|automated|autonomous)\b[ \w-]{0,20}\b(assistants?|agents?|models?|systems?|tools?|readers?)\b"
