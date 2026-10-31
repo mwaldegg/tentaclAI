@@ -67,6 +67,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   the notification now also say *PDF text not checked* / *PDF text partly checked* (#50).
 - Jobs: `*` is refused as a group name – it is the value of the All tab and made a tab that could not be selected (#55).
 - `svc jobs` lists jobs without a group last, also after groups starting with a non-ASCII letter (e.g. `Über…`) (#59).
+- Injection scan: "as an agent" / "as an assistant" in ordinary prose (e.g. a repository CLAUDE.md) is no longer
+  flagged as addressing an AI agent (#63).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
