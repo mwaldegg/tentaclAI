@@ -674,6 +674,8 @@ def save(form, jid=None, new_id=None, enabled=True):
         raise ValueError("unknown job")
     old = jobs.get(jid, {})
     job = dict(old, **fields, enabled=old.get("enabled", enabled), created=old.get("created", time.time()))
+    if "group" in fields and (old.get("group") or "") != fields["group"]:
+        job.pop("order", None)  # last in its new group, as with set_group()
     if old.get("prompt") and old["prompt"] != fields["prompt"]:  # the earlier prompt stays restorable
         job["prompt_history"] = ([{"ts": time.time(), "prompt": old["prompt"]}] + list(old.get("prompt_history") or []))[:PROMPT_HISTORY]
     if old.get("schedule") != fields["schedule"] or "next" not in old:

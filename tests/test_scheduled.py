@@ -496,6 +496,18 @@ def test_group_order_and_group_run(sj, monkeypatch, tmp_path):
     assert queued == [b, a] and not sj._run(nxt).get("chain") and sj.chain_next(nxt) is None  # the last one: nothing after it
 
 
+def test_group_change_in_editor_puts_job_last(sj, monkeypatch, tmp_path):
+    monkeypatch.setattr(sj, "JOBS", str(tmp_path / "jobs.json"))
+    monkeypatch.setattr(sj, "tentacles", lambda: KNOWN)
+    b, c = (sj.save({"name": n, "prompt": "p", "kind": "manual", "group": "Y"}) for n in ("B", "C"))
+    a, x = (sj.save({"name": n, "prompt": "p", "kind": "manual", "group": "X"}) for n in ("A", "Z"))
+    assert sj.move(c, -1) and sj.move(a, 1)  # Y: C 1, B 2 – X: Z 1, A 2
+    sj.save({"name": "A", "prompt": "p", "kind": "manual", "group": "Y"}, a)  # the editor, not the group menu
+    assert sj.in_group("Y") == [c, b, a]  # last in its new group, as with set_group()
+    sj.put(c, {k: v for k, v in sj.definition(sj.get(c)).items() if k != "group"})  # no group: keeps its place
+    assert sj.in_group("Y") == [c, b, a] and sj.in_group("X") == [x]
+
+
 def test_svc_jobs_group(monkeypatch, tmp_path, capsys):
     import importlib
     jp = importlib.import_module("svclib.jobs_part")
