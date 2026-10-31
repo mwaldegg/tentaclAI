@@ -272,6 +272,10 @@ def test_helpers(sj, monkeypatch):
     tools = argv[argv.index("--allowedTools") + 1]
     assert "Bash(svc:*)" in tools and "Bash(head:*)" in tools and "python3" not in tools
     assert "these text tools (also in pipes and chains): head" in argv[argv.index("--append-system-prompt") + 1]
+    assert "Don't wait for external state" not in argv[argv.index("--append-system-prompt") + 1]
+    monkeypatch.setattr(envfile, "read_env", lambda *a, **k: {})
+    argv = sj.claude_argv({"name": "x", "prompt": "p", "profile": "read-only"}, "r", "s")
+    assert "Don't wait for external state" in argv[argv.index("--append-system-prompt") + 1]
 
 
 def test_definition_roundtrip_and_put(sj, monkeypatch, tmp_path):
