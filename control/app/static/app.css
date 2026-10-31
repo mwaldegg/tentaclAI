@@ -582,9 +582,16 @@ input[type=checkbox]:not(.switch-cb) { accent-color: var(--accent-2); }
 .jl-tool .jl-text { color: var(--accent); }
 .jl-out .jl-text { color: var(--muted); }
 .jl-err .jl-text, .jl-err .jl-mark { color: var(--err); }
-.job-steps > summary { cursor: pointer; }
-.job-details { margin-top: 6px; }
-.job-details > summary { cursor: pointer; }
+.job-result { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+  background: var(--panel-2); padding: 8px 12px; margin: 0 0 6px; }
+.job-result.ok { border-left-color: var(--ok); } .job-result.warn { border-left-color: var(--warn); } .job-result.err { border-left-color: var(--err); }
+.job-result-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
+.job-result > p { margin: 0; color: var(--text); font-size: 14px; line-height: 1.5; }
+.job-details { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+.job-details > summary, .job-steps > summary { cursor: pointer; color: var(--muted); list-style: none; }
+.job-details > summary::before, .job-steps > summary::before { content: "▸"; display: inline-block; transition: transform .15s; }
+.job-details[open] > summary::before, .job-steps[open] > summary::before { transform: rotate(90deg); }
+.job-details > summary::-webkit-details-marker, .job-steps > summary::-webkit-details-marker { display: none; }
 .md { max-height: 340px; overflow: auto; margin-top: 6px; color: var(--muted); }
 .md p, .md ul { margin: 0 0 6px; }
 .md ul { padding-left: 18px; }

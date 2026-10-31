@@ -84,8 +84,11 @@
   <summary>{{ light(r) }}{% if r.id in new_ids %} <span class="pill accent" title="ended since your last visit">new</span>{% endif %} <span>{% if r.status == 'running' %}<span class="muted">Claude is working – <span class="elapsed" data-since="{{ r.started or r.queued }}"></span></span>{% elif r.status == 'queued' %}<span class="muted">waiting for the run before it</span>{% else %}{{ res.get('title') or r.get('error') or '' }}{% endif %}</span><span class="faint small">{{ fmt(r.get('started') or r.queued) }}{% if r.seconds %} · {{ r.seconds }} s{% endif %}{% if r.cost %} · ${{ '%.2f' % r.cost }}{% endif %}{% if r.trigger == 'manual' %} · manual{% elif r.trigger == 'group' %} · group run{% endif %}</span></summary>
   {% if r.chain %}<div class="small faint job-chain">{% if r.status in ('running', 'queued') %}then: {% elif r.status != 'done' %}group run ended here – not started: {% else %}next: {% endif %}{% for k in r.chain %}{{ job_names.get(k, k) }}{{ ' → ' if not loop.last }}{% endfor %}</div>{% endif %}
   <div class="small" style="margin-top:8px">
-    {% if res.get('summary') %}<p style="margin:0 0 6px">{{ res.summary }}</p>{% endif %}
-    {% if res.get('details') %}<details class="job-details"><summary class="muted">Details</summary><div class="md">{{ md(res.details) }}</div></details>{% endif %}
+    {% if res.get('summary') or res.get('details') %}<div class="job-result {{ {'ok': 'ok', 'warn': 'warn', 'alert': 'err'}.get(res.get('status'), '') }}">
+      <div class="job-result-label">Result</div>
+      {% if res.get('summary') %}<p>{{ res.summary }}</p>{% endif %}
+      {% if res.get('details') %}<details class="job-details"><summary>Details</summary><div class="md">{{ md(res.details) }}</div></details>{% endif %}
+    </div>{% endif %}
     {% if r.get('error') and r.status != 'done' %}<p class="muted" style="margin:0">{{ r.error }}</p>{% endif %}
     {% if r.get('denials') %}<p class="muted" style="margin:6px 0 0">{{ r.denials }} tool call(s) refused by the {{ r.profile }} profile.</p>{% endif %}
     {% if r.actions and not pend %}{{ proposals(r) }}{% endif %}
