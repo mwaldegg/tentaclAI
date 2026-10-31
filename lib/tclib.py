@@ -873,7 +873,7 @@ def clean_untrusted(text):
 
 
 _I = re.IGNORECASE | re.MULTILINE
-_NOUN_BEFORE = ("a", "an", "the", "dry", "test", "each", "every", "this", "one", "single", "first", "last", "next", "svc")  # "a run", "dry run" …
+_NOUN_BEFORE = ("a", "an", "the", "dry", "test", "each", "every", "single", "svc")  # "a run", "dry run" … – not "first"/"next": imperatives (#84)
 INJECTION_PATTERNS = [
     ("asks to ignore instructions", re.compile(
         r"\b(ignore|disregard|forget|override|bypass)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all|any|your|the)\b[^.\n]{0,25}"
