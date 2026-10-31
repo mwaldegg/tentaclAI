@@ -133,8 +133,8 @@ SYSTEM = ("This is an unattended scheduled job of tentaclAI named {name!r}; nobo
           "the summary.{ro}")
 SYSTEM_RO = (" This run is read-only: tentacles can only be read, files in the sandbox can't be edited – report what "
              "should be done instead of trying it. Bash allows only svc and these text tools (also in pipes and chains): {helpers}.")
-SYSTEM_SLEEP = (" To wait, chain sleep with the check that follows (`sleep 60 && svc …`) – Claude Code blocks a sleep on "
-                "its own, and one in the background doesn't wait.")
+SYSTEM_SLEEP = (" Don't wait for external state (CI, deploys): Claude Code blocks a longer sleep, also chained with a "
+                "check – report it as still running instead.")
 READ_ONLY_TOOLS = "Read,Grep,Glob,WebFetch,WebSearch,Bash(svc:*)"
 # text tools a read-only job may chain with svc (`svc … | head`) – Settings → Jobs (JOB_READONLY_HELPERS)
 HELPERS_DEFAULT = ("echo", "head", "tail", "grep", "jq", "sort", "uniq", "wc", "cut", "tr", "date", "sleep")
