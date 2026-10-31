@@ -23,6 +23,13 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   A PDF that can't be read gets *PDF text not checked* on its audit entry. Base64 inside text (a mail, a page, `cat`)
   is still a finding.
 
+- **Browser and web-app tools in the sandbox:** Playwright 1.64.1 for Node and Python with headless Chromium in
+  `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`), fonts for umlauts and emoji, and
+  `tc-shot <url|file> <out.png>` for screenshots through the gateway – Claude can look at the web app it builds. Also
+  gcc/make, `python3-dev`, `uv`, `pnpm`, `sqlite3`, ShellCheck and ImageMagick. Claude's instructions describe them and
+  the rules for screenshots (only of what the task is about, no private photos in published ones). The image grows by
+  about 1.1 GB.
+
 ### Changes / fixes
 - Prompt-injection hook: reading the same content with the same findings again in one session (a job working on
   tentaclAI's own scanner tests) gives Claude a one-line reminder instead of the full warning; changed content or a new
@@ -82,7 +89,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
   recreating `tentaclai` ends running sessions and Remote Control. The sandbox image now contains `poppler-utils`
-  (`pdftotext`). Nothing else to do.
+  (`pdftotext`) and Playwright with headless Chromium, compilers and web-app tools (about 1.1 GB more; the first build
+  downloads Chromium). A project that ran `playwright install` itself can delete `~/.cache/ms-playwright`. Nothing
+  else to do.
 
 ## v0.23.0 – 2026-10-26
 

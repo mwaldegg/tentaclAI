@@ -191,6 +191,8 @@ check "sandbox can't read the gateway policy" "$(CTL http://tctest-control:8080/
 check "sandbox can't create network approvals" "$(CTL -X POST -H 'Content-Type: application/json' -d '{"host":"evil.test","port":443}' http://tctest-control:8080/internal/egress/ask)" "403"
 check "svc still reaches its approvals endpoint" "$($C svc pending >/dev/null 2>&1 && echo ok)" "ok"
 check "psql shell escape runs as tcrun" "$(echo '\! id -un' | $CI svc db testdbrw shell 2>/dev/null | tail -1)" "tcrun"
+check "Claude takes a screenshot with the built-in browser" "$($C sh -c 'cd /tmp && printf "<h1>Grüße 🐙</h1>" > s.html && tc-shot s.html s.png >/dev/null && head -c 4 s.png | tail -c 3' 2>/dev/null)" "PNG"
+check "… Python Playwright finds the same browser" "$($C python3 -c 'from playwright.sync_api import sync_playwright as p; b = p().start().chromium.launch(); print("ok"); b.close()' 2>/dev/null)" "ok"
 fi
 
 if want svc; then

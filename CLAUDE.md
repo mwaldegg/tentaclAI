@@ -7,7 +7,9 @@ that one is generated from `build/CLAUDE.base.md` by `build/claude-instructions`
 
 tentaclAI = sandbox + service gateway for Claude Code. Three containers (`compose.yaml`):
 
-- `claude` → container **tentaclai** (`build/`): Claude Code, `svc` (service gateway), `tc-scan`, remote control loop.
+- `claude` → container **tentaclai** (`build/`): Claude Code, `svc` (service gateway), `tc-scan`, remote control loop,
+  web-app tools (Playwright + headless Chromium in `/opt/pw-browsers`, `tc-shot`; `PLAYWRIGHT_VERSION` pins npm and pip
+  package together; their env vars are passed through `entrypoint.sh`'s clean environment).
   `build/svc` is only the entry point; svc's code is the package `build/svclib/` (→ `/usr/local/lib/tentaclai/svclib`,
   layout in its `__init__.py`): `core` (imports no other part), `gate` (lookup with the job limit, audit, approvals,
   `guarded()`), `safeguards` (redaction, untrusted framing, injection scan), one `*_part` module per command family,

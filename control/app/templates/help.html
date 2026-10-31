@@ -442,7 +442,9 @@ svc pending               approvals waiting in Approvals and active grants (also
 svc sync                  register MCP, clone missing repos, write SERVICES.md
 tc-scan                   read-only inventory report
 /inventory · /onboard &lt;service&gt;   Claude commands (inside a Claude session)
-gh …                      GitHub CLI without credentials (public data)</pre>
+gh …                      GitHub CLI without credentials (public data)
+tc-shot &lt;url|file&gt; &lt;out.png&gt;   screenshot with the built-in headless Chromium (--full, --selector, --insecure)</pre>
+      <p>For web apps the image brings Playwright 1.64.1 (Node and Python) with headless Chromium in <code>/opt/pw-browsers</code>, fonts with umlauts and emoji, gcc/make, <code>uv</code>, <code>pnpm</code>, <code>sqlite3</code>, ShellCheck and ImageMagick – Claude starts an app on the sandbox's localhost, takes screenshots and looks at them; nothing is downloaded at run time but the project's own packages.</p>
       <p>On the host (<code>{{ site.tc_dir }}</code>): <code>./tentaclai.sh [init|rc|shell|rootshell|login|status|svc|scan|inventory|passwd|reset-2fa|setup-url|update]</code>, <code>./ssh-host.sh add|remove|list|test</code>.</p>
     </section>
 
