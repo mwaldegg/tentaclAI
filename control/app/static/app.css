@@ -165,8 +165,17 @@ th[aria-sort="descending"] .sort-ind::after { content: "↓"; opacity: 1; color:
 .tabs a.active { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
 .tabs a:hover { text-decoration: none; color: var(--text); }
 .job-tabs .pill { margin-left: 2px; padding: 0 6px; }
-.job-group-move { display: inline; } .job-group-move select { display: inline-block; width: auto; max-width: 14em; padding: 1px 22px 1px 6px; font-size: 12px; height: auto; }
+.job-group-move { display: inline; }
+.job-group-move select { display: inline-block; width: auto; max-width: 14em; height: auto; min-height: 0; margin: 0; padding: 2px 22px 2px 10px;
+  border: 0; border-radius: 99px; background-color: var(--panel-2); color: var(--muted); font-size: 12px; font-weight: 600;
+  line-height: inherit; background-position: right 8px center; background-size: 10px; cursor: pointer; box-shadow: none; }
+.job-group-move select:hover, .job-group-move select:focus-visible { color: var(--text); }
+.job-group-move select:focus-visible { outline: 2px solid var(--accent-soft); }
 .job-group-chips .pill { cursor: pointer; border: 0; } .job-group-chips .pill:hover { color: var(--text); }
+.job-group-run { margin: -4px 0 12px; gap: 10px; }
+.job-pos { display: inline-block; min-width: 1.4em; font-variant-numeric: tabular-nums; }
+.job-order { display: inline-flex; gap: 2px; } .job-order .btn { padding: 2px 7px; }
+.job-chain { margin: 2px 0 0 4px; }
 pre.console { background: #0b0e14; color: #d6dbe5; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin: 0;
   overflow: auto; max-height: calc(100vh - 230px); min-height: 300px; white-space: pre-wrap; word-break: break-word; }
 pre.rc { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; margin: 0; max-height: 190px; overflow: auto; white-space: pre-wrap; color: var(--muted); }

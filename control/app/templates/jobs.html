@@ -81,7 +81,8 @@
 {% set pend_learned = r.knowledge and (r.knowledge | selectattr('state', 'equalto', 'proposed') | list | length) > 0 %}
 {% set pend_prompt = r.prompt_suggestion and r.prompt_suggestion.state == 'proposed' %}
 <details class="mem-entry" id="run-{{ r.id }}"{% if r.id in new_ids %} open{% endif %}>
-  <summary>{{ light(r) }}{% if r.id in new_ids %} <span class="pill accent" title="ended since your last visit">new</span>{% endif %} <span>{% if r.status == 'running' %}<span class="muted">Claude is working – <span class="elapsed" data-since="{{ r.started or r.queued }}"></span></span>{% elif r.status == 'queued' %}<span class="muted">waiting for the run before it</span>{% else %}{{ res.get('title') or r.get('error') or '' }}{% endif %}</span><span class="faint small">{{ fmt(r.get('started') or r.queued) }}{% if r.seconds %} · {{ r.seconds }} s{% endif %}{% if r.cost %} · ${{ '%.2f' % r.cost }}{% endif %}{% if r.trigger == 'manual' %} · manual{% endif %}</span></summary>
+  <summary>{{ light(r) }}{% if r.id in new_ids %} <span class="pill accent" title="ended since your last visit">new</span>{% endif %} <span>{% if r.status == 'running' %}<span class="muted">Claude is working – <span class="elapsed" data-since="{{ r.started or r.queued }}"></span></span>{% elif r.status == 'queued' %}<span class="muted">waiting for the run before it</span>{% else %}{{ res.get('title') or r.get('error') or '' }}{% endif %}</span><span class="faint small">{{ fmt(r.get('started') or r.queued) }}{% if r.seconds %} · {{ r.seconds }} s{% endif %}{% if r.cost %} · ${{ '%.2f' % r.cost }}{% endif %}{% if r.trigger == 'manual' %} · manual{% elif r.trigger == 'group' %} · group run{% endif %}</span></summary>
+  {% if r.chain %}<div class="small faint job-chain">{% if r.status in ('running', 'queued') %}then: {% elif r.status != 'done' %}group run ended here – not started: {% else %}next: {% endif %}{% for k in r.chain %}{{ job_names.get(k, k) }}{{ ' → ' if not loop.last }}{% endfor %}</div>{% endif %}
   <div class="small" style="margin-top:8px">
     {% if res.get('summary') %}<p style="margin:0 0 6px">{{ res.summary }}</p>{% endif %}
     {% if res.get('details') %}<pre class="rc" style="max-height:340px">{{ res.details }}</pre>{% endif %}
@@ -130,12 +131,19 @@
   <a href="/jobs?tab=*" class="{{ 'active' if tab == '*' }}">All <span class="faint">{{ all_rows | length }}</span></a>
   {% for g, n, worst, k in tabs %}<a href="/jobs?tab={{ g | urlencode }}" class="{{ 'active' if tab == g }}"{% if not g %} title="jobs without a group"{% endif %}>{{ g or 'No group' }} <span class="faint">{{ n }}</span>{% if worst %} <span class="pill {{ 'err' if worst == 'alert' else 'warn' }}" title="{{ k }} job{{ '' if k == 1 else 's' }} with {{ worst }} in the last run">{{ k }}</span>{% endif %}</a>{% endfor %}
 </nav>
+{% set ordered = tab not in ('*', '') and rows | length > 1 %}
+{% if tab not in ('*', '') and rows %}
+<div class="row job-group-run">
+  <button class="btn sm" hx-post="/jobs/run-group" hx-vals='{{ {"group": tab} | tojson }}' hx-confirm="Run the {{ rows | length }} jobs of {{ tab }} one after the other: {{ rows | map(attribute='name') | join(' → ') }}? Each starts when the one before has finished – a failed or stopped run ends the group run."{{ ' disabled' if rows | selectattr('busy') | list }}>{{ icon('play') }}Run the group in order</button>
+  {% if ordered %}<span class="small faint">top to bottom – change the order with the arrows</span>{% endif %}
+</div>
+{% endif %}
 {% endif %}
 {% for j in rows %}
 <div class="card job-card{{ ' paused' if not j.enabled and j.schedule.kind != 'manual' }}" style="margin-bottom:14px">
   <div class="between" style="align-items:flex-start;gap:12px">
     <div style="min-width:0">
-      <h2 style="margin:0">{{ icon('clock') }}{{ j.name }}{% if j.builtin %} <span class="pill info" title="comes with tentaclAI – edit it freely, pause it if you don't want it (it can't be deleted); Reset to default in the editor{% if j.changed %} (your task is kept on updates){% else %} (its task follows updates while you don't change it){% endif %}">built-in</span>{% endif %}</h2>
+      <h2 style="margin:0">{% if ordered %}<span class="job-pos faint">{{ loop.index }}</span>{% else %}{{ icon('clock') }}{% endif %}{{ j.name }}{% if j.builtin %} <span class="pill info" title="comes with tentaclAI – edit it freely, pause it if you don't want it (it can't be deleted); Reset to default in the editor{% if j.changed %} (your task is kept on updates){% else %} (its task follows updates while you don't change it){% endif %}">built-in</span>{% endif %}</h2>
       {% if j.builtin and not j.enabled and not j.last_run %}<div class="small muted" style="margin-top:4px">Lets Claude learn from its work – proposes notes, you pick what goes in. Paused: each run uses your Claude plan; try <em>Run now</em>, then switch it on.</div>{% endif %}
       <div class="small muted" style="margin-top:4px">{{ j.when }}{% if j.schedule.kind != 'manual' %} · {% if j.enabled %}next {{ fmt(j.next) }}{% else %}<strong class="paused-note">paused</strong> – no automatic runs{% endif %}{% endif %} · {% if j.propose %}<span class="pill off" title="reads only and proposes svc commands – you pick which ones run">{{ icon('bulb') }}proposes</span>{% elif j.profile == 'standard' %}<span class="pill accent" title="{% if j.writes %}writes without asking: {{ j.writes | join(', ') }}{% endif %}{% if j.writes and j.asks %} · {% endif %}{% if j.asks %}asks first: {{ j.asks | join(', ') }}{% endif %}{% if not j.writes and not j.asks %}no writable tentacle{% endif %}">writes</span>{% else %}<span class="pill off" title="every tentacle is read-only for this job">reads</span>{% endif %}{% if j.scope %} · <span class="faint" title="svc refuses every tentacle not named in the task">only named tentacles</span>{% endif %} · notify {{ j.notify }} · <form class="job-group-move" hx-post="/jobs/{{ j.id }}/group" title="move the job to another group"><select name="group" aria-label="Group of {{ j.name }}" data-current="{{ j.group or '' }}">
         <option value=""{{ ' selected' if not j.group }}>No group</option>
@@ -144,6 +152,7 @@
       {% if j.unknown %}<div class="small" style="margin-top:4px"><span class="pill warn" title="renamed or removed since – svc will refuse it">⚠ the task names @{{ j.unknown | join(', @') }}, which {{ 'no longer exists' if j.unknown | length == 1 else 'no longer exist' }}</span> – <a href="/jobs/{{ j.id }}">edit the task</a></div>{% endif %}
     </div>
     <div class="row" style="flex-wrap:nowrap">
+      {% if ordered %}<span class="job-order"><button class="btn sm ghost" hx-post="/jobs/{{ j.id }}/move?step=-1" title="earlier in the group" aria-label="Move {{ j.name }} up"{{ ' disabled' if loop.first }}>↑</button><button class="btn sm ghost" hx-post="/jobs/{{ j.id }}/move?step=1" title="later in the group" aria-label="Move {{ j.name }} down"{{ ' disabled' if loop.last }}>↓</button></span>{% endif %}
       <button class="btn sm primary" hx-post="/jobs/{{ j.id }}/run" {{ 'disabled' if j.busy }}>{{ icon('play') }}Run now</button>
       {% if j.schedule.kind != 'manual' %}<span class="switch-row" title="{{ 'runs on its schedule – switch off to pause' if j.enabled else 'paused – switch on to run on its schedule again' }}"><span class="{{ 'on' if j.enabled }}">{{ 'On' if j.enabled else 'Paused' }}</span><button class="switch" role="switch" aria-checked="{{ 'true' if j.enabled else 'false' }}" aria-label="Run on schedule" hx-post="/jobs/{{ j.id }}/toggle"></button></span>{% endif %}
       <a class="btn sm" href="/jobs/{{ j.id }}">Edit</a>

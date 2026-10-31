@@ -88,7 +88,7 @@ async def jobs_page(request: Request, tab: str | None = None):
         tab = "*"  # all jobs – also when the group is gone (its last job moved away)
     request.session["jobs_tab"] = tab
     shown = rows if tab == "*" or not tabs else [r for r in rows if (r.get("group") or "") == tab]
-    return page(request, "jobs.html", rows=shown, all_rows=rows, tabs=tabs, tab=tab, groups=scheduled.groups(),
+    return page(request, "jobs.html", rows=shown, all_rows=rows, tabs=tabs, tab=tab, groups=scheduled.groups(), job_names=names,
                 new=[dict(r, job_name=names.get(r.get("job"), r.get("name", "?"))) for r in new],
                 new_ids={r["id"] for r in new}, templates=scheduled.templates(), token=scheduled.state_token(), now=time.time(),
                 issue_url=lambda x, r=None: knowledge.issue_url(x, TC_VERSION, run=r, edition=extensions.edition()),
@@ -146,6 +146,26 @@ async def job_group(request: Request, jid: str):
     except ValueError as e:
         return respond(request, f"Not moved: {e}", "err", refresh=True)  # the select shows the old group again
     return respond(request, f"Moved to the group {g}" if g else "Moved out of its group", refresh=True)
+
+
+@router.post("/jobs/{jid}/move", response_class=HTMLResponse)
+async def job_move(request: Request, jid: str, step: int = 1):
+    try:
+        scheduled.move(jid, -1 if step < 0 else 1)
+    except ValueError as e:
+        return respond(request, f"Not moved: {e}", "err")
+    return respond(request, "Order changed", refresh=True)
+
+
+@router.post("/jobs/run-group", response_class=HTMLResponse)
+async def jobs_run_group(request: Request):
+    group = str((await request.form()).get("group", ""))
+    try:
+        ids = scheduled.run_group(group)
+    except ValueError as e:
+        return respond(request, f"Not started: {e}", "err")
+    return respond(request, f"{len(ids)} job{'s' if len(ids) != 1 else ''} of {group} queued – each starts when the one before has finished",
+                   refresh=True)
 
 
 @router.post("/jobs/{jid}/toggle", response_class=HTMLResponse)

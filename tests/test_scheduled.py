@@ -464,6 +464,38 @@ def test_job_tabs(sj, monkeypatch, tmp_path):
     assert sj.tabs([{"group": "", "last_run": None}]) == []  # nobody uses tabs: no tab bar
 
 
+def test_group_order_and_group_run(sj, monkeypatch, tmp_path):
+    monkeypatch.setattr(sj, "JOBS", str(tmp_path / "jobs.json"))
+    monkeypatch.setattr(sj, "HISTORY", str(tmp_path / "history.json"))
+    monkeypatch.setattr(sj, "tentacles", lambda: KNOWN)
+    queued = []
+    monkeypatch.setattr(sj, "_queue", type("Q", (), {"put_nowait": lambda self, x: queued.append(x[1])})())
+    monkeypatch.setattr(sj, "_current", {})
+    a, b, c = (sj.save({"name": n, "prompt": "p", "kind": "manual", "group": "Flow"}) for n in ("Review", "Fix", "Find"))
+    sj.save({"name": "Other", "prompt": "p", "kind": "manual"})
+    assert sj.in_group("Flow") == [c, b, a]  # no order yet: by name
+    assert sj.move(a, -1) and sj.move(a, -1) and not sj.move(a, -1)  # at the top already
+    assert sj.in_group("Flow") == [a, c, b]
+    assert sj.move(c, 1) and sj.in_group("Flow") == [a, b, c]
+    assert [r["id"] for r in sj.overview()][:3] == [a, b, c]  # the page shows the group in its order
+    sj.set_group(a, "Elsewhere")
+    sj.set_group(a, "Flow")
+    assert sj.in_group("Flow") == [b, c, a]  # back in the group: last
+    with pytest.raises(ValueError, match="no jobs"):
+        sj.run_group("Nope")
+    assert sj.run_group("Flow") == [b, c, a] and queued == [b]
+    with pytest.raises(ValueError, match="already queued"):
+        sj.run_group("Flow")
+    first = sj.history()[-1]
+    assert first["trigger"] == "group" and first["chain"] == [c, a]
+    sj._update_run(first["id"], status="failed")
+    assert sj.chain_next(first["id"]) is None and queued == [b]  # a failed run ends the group run
+    sj._update_run(first["id"], status="done")
+    sj.delete(c)  # deleted meanwhile: left out
+    nxt = sj.chain_next(first["id"])
+    assert queued == [b, a] and not sj._run(nxt).get("chain") and sj.chain_next(nxt) is None  # the last one: nothing after it
+
+
 def test_svc_jobs_group(monkeypatch, tmp_path, capsys):
     import importlib
     jp = importlib.import_module("svclib.jobs_part")

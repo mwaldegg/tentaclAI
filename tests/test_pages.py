@@ -598,6 +598,21 @@ def test_job_tabs_render_and_move(client, app_module, monkeypatch, tmp_path):
     assert 'title="1 job with alert in the last run"' in html
     html = client.get("/jobs?tab=Spam").text
     assert "Spam check" in html and "Disk check" not in html and "/jobs/new?group=Spam" in html
+    assert "Run the group in order" in html and "job-order" not in html  # one job: nothing to order
+    c = scheduled.save({"name": "Spam report", "prompt": "p", "kind": "manual", "group": "Spam"})
+    html = client.get("/jobs?tab=Spam").text
+    assert f'/jobs/{c}/move?step=-1' in html and "Spam check → Spam report" in html
+    r = client.post(f"/jobs/{c}/move?step=-1", headers={"HX-Request": "true"})
+    assert r.headers.get("HX-Refresh") == "true" and scheduled.in_group("Spam") == [c, a]
+    monkeypatch.setattr(scheduled, "run_now", lambda jid, trigger="manual", chain=None: calls.append((jid, trigger, chain)))
+    calls = []
+    client.post("/jobs/run-group", data={"group": "Spam"}, headers={"HX-Request": "true"})
+    assert calls == [(c, "group", [a])]
+    jsonstore.save(scheduled.HISTORY, [{"id": "r2", "job": c, "name": "x", "status": "failed", "queued": 1, "ended": 2,
+                                        "trigger": "group", "chain": [a]}])
+    html = client.get("/jobs?tab=Spam").text
+    assert "group run ended here – not started: Spam check" in html and "· group run" in html
+    scheduled.delete(c)
     assert "Disk check" not in client.get("/jobs").text  # the picked tab is remembered
     r = client.post(f"/jobs/{b}/group", data={"group": "spam"}, headers={"HX-Request": "true"})
     assert scheduled.get(b)["group"] == "Spam" and r.headers.get("HX-Refresh") == "true"

@@ -523,7 +523,7 @@ def get(jid):
     return load().get(jid)
 
 
-RESERVED = {"new", "save", "runs"}  # paths of the Jobs pages
+RESERVED = {"new", "save", "runs", "run-group"}  # paths of the Jobs pages
 
 
 def slug(name):
@@ -596,9 +596,39 @@ def set_group(jid, group):
     jobs = load()
     if jid not in jobs:
         raise ValueError("unknown job")
+    if (jobs[jid].get("group") or "") != g:
+        jobs[jid].pop("order", None)  # last in its new group
     jobs[jid]["group"] = g
     jsonstore.save(JOBS, jobs)
     return g
+
+
+def order_key(job):
+    """a job's place in its group: its position (set with the arrows on the Jobs page), then the name"""
+    return (job.get("order") is None, job.get("order") or 0, job.get("name", "").lower())
+
+
+def in_group(group, jobs=None):
+    """the ids of a group's jobs in their order – the order "Run the group" follows"""
+    jobs = load() if jobs is None else jobs
+    return [k for k, j in sorted(jobs.items(), key=lambda kv: order_key(kv[1])) if (j.get("group") or "") == group]
+
+
+def move(jid, step):
+    """move a job up (-1) or down (+1) in its group; returns False at either end"""
+    check_write("jobs", jid)
+    jobs = load()
+    if jid not in jobs:
+        raise ValueError("unknown job")
+    ids = in_group(jobs[jid].get("group") or "", jobs)
+    i = ids.index(jid)
+    if not 0 <= i + step < len(ids):
+        return False
+    ids[i], ids[i + step] = ids[i + step], ids[i]
+    for n, k in enumerate(ids, 1):
+        jobs[k]["order"] = n
+    jsonstore.save(JOBS, jobs)
+    return True
 
 
 def tabs(rows):
@@ -977,8 +1007,8 @@ def quota_full():
                  if lim.get("percent", 0) >= QUOTA_SKIP), "")
 
 
-def run_now(jid, trigger="manual"):
-    """queue a run; returns the run id"""
+def run_now(jid, trigger="manual", chain=None):
+    """queue a run; returns the run id. chain: the jobs to run after it, one after the other (a group run)"""
     job = get(jid)
     if job is None:
         raise ValueError("unknown job")
@@ -989,10 +1019,39 @@ def run_now(jid, trigger="manual"):
     run_id = secrets.token_hex(6)
     h = history()
     h.append({"id": run_id, "job": jid, "name": job["name"], "profile": job.get("profile", "read-only"),
-              "trigger": trigger, "status": "queued", "queued": time.time()})
+              "trigger": trigger, "status": "queued", "queued": time.time(), **({"chain": list(chain)} if chain else {})})
     _save_history(h)
     _queue.put_nowait((run_id, jid))
     return run_id
+
+
+def run_group(group):
+    """run a group's jobs in their order, each after the one before has finished; returns the job ids"""
+    ids = in_group(group) if group else []
+    if not ids:
+        raise ValueError("no jobs in this group")
+    busy = [k for k in ids if k in _current.values() or any(r.get("job") == k and r["status"] == "queued" for r in history())]
+    if busy:
+        raise ValueError(f"already queued or running: {', '.join(get(k)['name'] for k in busy)}")
+    run_now(ids[0], trigger="group", chain=ids[1:])
+    return ids
+
+
+def chain_next(run_id):
+    """after a run of a group run: queue the next job – only when this run ended normally (done, whatever it found); a
+    failed, timed-out or stopped run ends the group run. A job deleted, queued or running meanwhile is left out."""
+    run = next((r for r in history() if r.get("id") == run_id), None)
+    chain = (run or {}).get("chain") or []
+    if not chain or run.get("status") != "done":
+        return None
+    for i, jid in enumerate(chain):
+        if get(jid) is None:
+            continue
+        try:
+            return run_now(jid, trigger="group", chain=chain[i + 1:])
+        except ValueError:
+            continue
+    return None
 
 
 def _update_run(run_id, **fields):
@@ -1129,6 +1188,10 @@ async def worker():
         except Exception as e:  # noqa: BLE001 – one broken run must not stop the runner
             log.warning(f"jobs: {e}")
             _update_run(run_id, status="failed", error=str(e)[:300], ended=time.time())
+        try:
+            chain_next(run_id)  # here, not in the thread: the queue belongs to this loop
+        except Exception as e:  # noqa: BLE001
+            log.warning(f"jobs: group run: {e}")
 
 
 def due(now=None):
@@ -1336,7 +1399,7 @@ def overview():
     h = history()
     known = tentacles()
     rows = []
-    for jid, job in sorted(load().items(), key=lambda kv: kv[1]["name"].lower()):
+    for jid, job in sorted(load().items(), key=lambda kv: ((kv[1].get("group") or "") == "", (kv[1].get("group") or "").lower(), order_key(kv[1]))):
         runs = [r for r in h if r.get("job") == jid]
         writes, asks = reach(job, known)
         unknown = [n for n in mentions(job.get("prompt")) if n not in known]  # renamed or removed since

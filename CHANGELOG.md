@@ -8,7 +8,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - **Job groups:** sort jobs by topic – an optional *Group* per job (editor: click an existing group or type a new
   one; on each card a menu to move it, *New group…* included), one tab per group on the Jobs page with the number of
   jobs and a warn/alert count, the page remembers the tab you picked. `svc jobs --group <group>` lists one group;
-  `svc config put job` takes `group` (left out, the job keeps its group).
+  `svc config put job` takes `group` (left out, the job keeps its group). In a group's tab the jobs have an order (arrows on
+  the cards) and **Run the group in order** runs them as a chain: each starts when the one before has finished, a failed
+  or stopped run ends it.
 
 - **Network approvals name the process:** while the gateway holds a connection to an unknown destination, tentacontrol
   asks the sandbox (`svc origin-of`, root) which process holds it – the card shows its command and user, the Claude
