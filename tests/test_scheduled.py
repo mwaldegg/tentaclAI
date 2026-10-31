@@ -545,3 +545,12 @@ def test_svc_jobs_group(monkeypatch, tmp_path, capsys):
     assert "Group" in out and "Spam handling" in out and out.index("spam-a") < out.index("disk")  # groups first, none last
     assert out.index("watch") < out.index("disk")  # also a group starting with a non-ASCII letter
     assert jp.cmd_jobs(["--group", "nope"]) == 0 and "No jobs in the group" in capsys.readouterr().out
+
+
+def test_details_markdown_is_rendered_and_escaped(sj):
+    html = str(sj.md("**Range:** a..b\n\n| Typ | Was |\n|---|---|\n| Bug | `x<y` in [#86](https://github.com/o/r/pull/86) |\n\n"
+                     "- one <script>alert(1)</script>\n- [bad](javascript:alert(1))"))
+    assert "<p><strong>Range:</strong> a..b</p>" in html
+    assert "<table><tr><th>Typ</th><th>Was</th></tr><tr><td>Bug</td><td><code>x&lt;y</code> in " in html
+    assert '<a href="https://github.com/o/r/pull/86" target="_blank" rel="noopener">#86</a>' in html and "---" not in html
+    assert "<li>one &lt;script&gt;alert(1)&lt;/script&gt;</li>" in html and "<li>[bad](javascript:alert(1))</li>" in html

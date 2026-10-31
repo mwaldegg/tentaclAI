@@ -583,6 +583,13 @@ input[type=checkbox]:not(.switch-cb) { accent-color: var(--accent-2); }
 .jl-out .jl-text { color: var(--muted); }
 .jl-err .jl-text, .jl-err .jl-mark { color: var(--err); }
 .job-steps > summary { cursor: pointer; }
+.job-details { margin-top: 6px; }
+.job-details > summary { cursor: pointer; }
+.md { max-height: 340px; overflow: auto; margin-top: 6px; color: var(--muted); }
+.md p, .md ul { margin: 0 0 6px; }
+.md ul { padding-left: 18px; }
+.md table { border-collapse: collapse; margin: 0 0 6px; }
+.md th, .md td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; vertical-align: top; }
 .job-actions { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
 .ja-row { display: flex; gap: 10px; align-items: flex-start; padding: 5px 0; }
 .ja-row > input { margin-top: 3px; }

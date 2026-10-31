@@ -22,6 +22,7 @@ import time
 import uuid
 
 import tclib
+from markupsafe import Markup, escape
 
 from . import auditlog, dockerops, jsonstore, knowledge, models, notify
 from .central import check_write
@@ -44,10 +45,14 @@ TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 SCHEMA = {"type": "object", "additionalProperties": False, "required": ["status", "title", "summary"], "properties": {
     "status": {"type": "string", "enum": ["ok", "warn", "alert"],
-               "description": "ok = nothing to do, warn = needs attention soon, alert = act now"},
-    "title": {"type": "string", "description": "one line, e.g. '2 certificates expire within 14 days'"},
-    "summary": {"type": "string", "description": "at most three sentences"},
-    "details": {"type": "string", "description": "optional details (Markdown)"}}}
+               "description": "ok = nothing for the user to do, warn = the user should look at or do something soon, "
+                              "alert = act now"},
+    "title": {"type": "string", "description": "one line: the outcome for the user, e.g. '2 certificates expire within "
+                                               "14 days' or 'PR #12 is ready to merge'"},
+    "summary": {"type": "string", "description": "at most three short sentences for the user: what came out and, if "
+                                                 "anything, what they should do (name it first) – not how you worked"},
+    "details": {"type": "string", "description": "optional, short Markdown for the record (what was checked, what was "
+                                                 "dropped) – shown folded, so nothing the user must read"}}}
 ACTION_TTL = 24 * 3600
 ACTION_MAX = 500
 ACTION_BAD = re.compile(r"[;&|`$<>\n\\]")
@@ -1344,6 +1349,57 @@ def discard_knowledge(run_id, picks=None, state="discarded"):
         raise ValueError("nothing picked")
     _update_run(run_id, knowledge=items)
     return n
+
+
+_MD_INLINE = re.compile(r"`([^`\n]+)`|\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\((https://[^\s)]+)\)")
+
+
+def _md_inline(text):
+    out, pos = [], 0
+    for m in _MD_INLINE.finditer(text):
+        out.append(str(escape(text[pos:m.start()])))
+        code, bold, label, url = m.groups()
+        if code is not None:
+            out.append(f"<code>{escape(code)}</code>")
+        elif bold is not None:
+            out.append(f"<strong>{escape(bold)}</strong>")
+        else:
+            out.append(f'<a href="{escape(url)}" target="_blank" rel="noopener">{escape(label)}</a>')
+        pos = m.end()
+    return "".join(out) + str(escape(text[pos:]))
+
+
+def md(text):
+    """a run's details (Markdown written by Claude, may quote what it read) → HTML: paragraphs, - lists, | tables,
+    **bold**, `code`, https links – everything else stays text, all of it escaped"""
+    html, para, items, rows = [], [], [], []
+
+    def flush():
+        if para:
+            html.append(f"<p>{'<br>'.join(_md_inline(x) for x in para)}</p>")
+        if items:
+            html.append("<ul>" + "".join(f"<li>{_md_inline(x)}</li>" for x in items) + "</ul>")
+        if rows:
+            head, body = rows[0], rows[1:]
+            html.append("<table><tr>" + "".join(f"<th>{_md_inline(c)}</th>" for c in head) + "</tr>"
+                        + "".join("<tr>" + "".join(f"<td>{_md_inline(c)}</td>" for c in r) + "</tr>" for r in body) + "</table>")
+        para.clear(), items.clear(), rows.clear()
+
+    for line in str(text or "").replace("\r\n", "\n").split("\n"):
+        t = line.strip()
+        kind = "row" if t.startswith("|") else "item" if re.match(r"[-*] ", t) else "text" if t else ""
+        if (kind != "row" and rows) or (kind != "item" and items) or (kind != "text" and para):
+            flush()
+        if kind == "row":
+            cells = [c.strip() for c in t.strip("|").split("|")]
+            if not all(re.fullmatch(r":?-+:?", c) for c in cells):  # the |---|---| line under the head
+                rows.append(cells)
+        elif kind == "item":
+            items.append(t[2:].strip())
+        elif kind == "text":
+            para.append(re.sub(r"^#+\s*", "", t))
+    flush()
+    return Markup("".join(html))
 
 
 def prompt_diff(old, new):

@@ -31,6 +31,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   about 1.1 GB.
 
 ### Changes / fixes
+- Jobs: a run's details are shown folded under *Details* and rendered (tables, lists, bold, code, links) instead
+  of raw Markdown; title and summary are asked to say what the user should do, not how the run worked.
 - Jobs: a run is told which weaknesses of tentaclAI the user already reported or dismissed under *For tentaclAI*
   (the latest 15), so it doesn't report the same one again in every run.
 - Prompt-injection scan: *asks to run commands* no longer fires on "run" or "call" as a noun – "a dry run of `svc config
