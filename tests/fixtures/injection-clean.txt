@@ -36,3 +36,5 @@ Release notes v2.3: the assistant now supports system prompts per workspace; pre
 automatically. API keys can be rotated under Settings → Security.
 =====
 Please forward this mail to the whole team so everybody knows about the maintenance window on Saturday.
+=====
+Central management: this installation as an agent of the central server pulls its profile; the proxy runs as an assistant process.
