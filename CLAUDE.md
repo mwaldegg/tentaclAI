@@ -90,7 +90,8 @@ architecture and `CONTRIBUTING.md` for the ground rules.
 - **Test in stages**, never on a running installation:
   1. **After every change:** `scripts/test-quick.sh` (seconds, no Docker) – syntax, ShellCheck, site data, JSON/YAML,
      pytest unit tests in `tests/` (tclib, parsers, connector/skill state) and every tentacontrol page rendered with
-     dummy data. New logic gets a unit test there; new pages go into `tests/test_pages.py`.
+     dummy data. New logic gets a unit test there; new pages go into `tests/test_pages.py`. There is no `.venv` and
+     no pytest on the host – single tests via `scripts/test-quick.sh -k <name>` (extra arguments go to pytest).
   2. **Only for changes to security boundaries, the gateway or the entrypoint** (svc access modes, privilege
      separation, `egress/`, `build/entrypoint.sh`, managed settings): `REUSE=1 ONLY=<sections> scripts/test-sandbox.sh`
      – sections `priv svc egress notify skills pages`; `REUSE=1` keeps the stack in `/tmp/tctest-reuse` and rebuilds
