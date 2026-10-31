@@ -92,6 +92,10 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - `svc git fetch`/`pull` no longer delete local tags that were never pushed – only remote branches are pruned (#74).
 - Jobs: a job moved to another group in the editor or with `svc config put job` is now last in its new group, as with
   the card's group menu – it kept its old position number and could run first in *Run the group in order* (#76).
+- Read-only jobs are told not to wait for external state such as CI and to report it as still running – Claude Code
+  blocks a longer `sleep`, also chained, so they used to poll turn by turn (#80).
+- Injection scan: imperatives like "Next run svc …" or "First use svc …" are flagged as "asks to run commands" again
+  (#84).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
