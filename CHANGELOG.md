@@ -71,6 +71,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - `svc jobs` lists jobs without a group last, also after groups starting with a non-ASCII letter (e.g. `Über…`) (#59).
 - Injection scan: "as an agent" / "as an assistant" in ordinary prose (e.g. a repository CLAUDE.md) is no longer
   flagged as addressing an AI agent (#63).
+- Jobs: a refused group move (e.g. to `*`) no longer leaves the group menu showing the rejected group – the page
+  reloads with the job's actual group and the error (#66).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
