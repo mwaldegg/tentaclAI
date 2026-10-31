@@ -603,6 +603,9 @@ def test_job_tabs_render_and_move(client, app_module, monkeypatch, tmp_path):
     assert scheduled.get(b)["group"] == "Spam" and r.headers.get("HX-Refresh") == "true"
     assert "Moved to the group Spam" in client.get("/jobs").text  # the flash message
     assert 'data-group="Spam"' in client.get(f"/jobs/{a}").text  # the editor offers the existing groups
+    r = client.post(f"/jobs/{a}/group", data={"group": "*"}, headers={"HX-Request": "true"})  # refused: reload
+    assert scheduled.get(a)["group"] == "Spam" and r.headers.get("HX-Refresh") == "true"
+    assert "Not moved:" in client.get("/jobs").text  # the select is rendered with the old group again
     client.post(f"/jobs/{a}/group", data={"group": ""}, headers={"HX-Request": "true"})
     client.post(f"/jobs/{b}/group", data={"group": ""}, headers={"HX-Request": "true"})
     html = client.get("/jobs").text  # no tab in use: no tab bar, all jobs

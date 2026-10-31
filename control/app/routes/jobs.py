@@ -144,7 +144,7 @@ async def job_group(request: Request, jid: str):
     try:
         g = scheduled.set_group(jid, (await request.form()).get("group", ""))
     except ValueError as e:
-        return respond(request, f"Not moved: {e}", "err")
+        return respond(request, f"Not moved: {e}", "err", refresh=True)  # the select shows the old group again
     return respond(request, f"Moved to the group {g}" if g else "Moved out of its group", refresh=True)
 
 

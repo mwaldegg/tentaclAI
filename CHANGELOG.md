@@ -22,6 +22,10 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   is still a finding.
 
 ### Changes / fixes
+- Prompt-injection hook: reading the same content with the same findings again in one session (a job working on
+  tentaclAI's own scanner tests) gives Claude a one-line reminder instead of the full warning; changed content or a new
+  session warns in full. tentaclAI's scanner writes the invisible characters it looks for as escapes, so reading its
+  source is no longer *hidden text* (#65).
 - Git services: `"author": {"name": …, "email": …}` in the `git` part sets the commit author of that working copy
   (applied by `svc git sync` / `svc sync`); without it the installation's default is used (Settings → Git name /
   email, `GIT_USER_NAME` / `GIT_USER_EMAIL`). The service page shows which one applies.
@@ -63,6 +67,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   the notification now also say *PDF text not checked* / *PDF text partly checked* (#50).
 - Jobs: `*` is refused as a group name – it is the value of the All tab and made a tab that could not be selected (#55).
 - `svc jobs` lists jobs without a group last, also after groups starting with a non-ASCII letter (e.g. `Über…`) (#59).
+- Injection scan: "as an agent" / "as an assistant" in ordinary prose (e.g. a repository CLAUDE.md) is no longer
+  flagged as addressing an AI agent (#63).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):

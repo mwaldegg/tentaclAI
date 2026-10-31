@@ -851,8 +851,8 @@ def approval_handoff(env):
 # Hardening and early warning, no guarantee: hidden text is removed, obvious attempts are flagged. The hard limits stay
 # svc's access modes, the egress gateway and Claude never holding a secret.
 
-_ZERO_WIDTH = re.compile("[​-‏⁠-⁤﻿­]")
-_BIDI = re.compile("[‪-‮⁦-⁩]")
+_ZERO_WIDTH = re.compile("[\u200b-\u200f\u2060-\u2064\ufeff\u00ad]")
+_BIDI = re.compile("[\u202a-\u202e\u2066-\u2069]")
 _TAGS = re.compile("[\U000e0000-\U000e007f]+")
 _CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -1478,4 +1478,4 @@ def audit_syslog(e, hostname="-", facility=SYSLOG_FACILITY, sdid=SYSLOG_SDID):
     if "T" in ts and re.search(r"[+-]\d{4}$", ts):
         ts = ts[:-2] + ":" + ts[-2:]  # an older entry: +0200 → +02:00
     pri = facility * 8 + int(e.get("severity", SEVERITY["info"]))
-    return f"<{pri}>1 {ts} {host} tentaclai - {msgid} [{sdid} {' '.join(params)}] ﻿{msg}"
+    return f"<{pri}>1 {ts} {host} tentaclai - {msgid} [{sdid} {' '.join(params)}] \ufeff{msg}"
