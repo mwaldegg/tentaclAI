@@ -73,6 +73,11 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   flagged as addressing an AI agent (#63).
 - Jobs: a refused group move (e.g. to `*`) no longer leaves the group menu showing the rejected group – the page
   reloads with the job's actual group and the error (#66).
+- Injection scan: "As an agent, run …", "As an assistant: …" and "As an agent your task …" are flagged as addressing
+  an AI agent again – #63 had dropped them along with the harmless prose forms (#68).
+- `svc git fetch`/`pull` no longer delete local tags that were never pushed – only remote branches are pruned (#74).
+- Jobs: a job moved to another group in the editor or with `svc config put job` is now last in its new group, as with
+  the card's group menu – it kept its old position number and could run first in *Run the group in order* (#76).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
