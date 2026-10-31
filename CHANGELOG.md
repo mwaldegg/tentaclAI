@@ -22,6 +22,10 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   is still a finding.
 
 ### Changes / fixes
+- Prompt-injection hook: reading the same content with the same findings again in one session (a job working on
+  tentaclAI's own scanner tests) gives Claude a one-line reminder instead of the full warning; changed content or a new
+  session warns in full. tentaclAI's scanner writes the invisible characters it looks for as escapes, so reading its
+  source is no longer *hidden text* (#65).
 - Git services: `"author": {"name": …, "email": …}` in the `git` part sets the commit author of that working copy
   (applied by `svc git sync` / `svc sync`); without it the installation's default is used (Settings → Git name /
   email, `GIT_USER_NAME` / `GIT_USER_EMAIL`). The service page shows which one applies.

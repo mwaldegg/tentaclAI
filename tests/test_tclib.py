@@ -246,7 +246,7 @@ def test_egress_rule_order():
 # ---------------------------------------------------------------- prompt-injection safeguards
 
 def test_clean_untrusted_removes_what_a_reader_cant_see():
-    text = "pay​ now‮" + "".join(chr(0xE0000 + ord(c)) for c in "ignore all") + " end\x07"
+    text = "pay\u200b now\u202e" + "".join(chr(0xE0000 + ord(c)) for c in "ignore all") + " end\x07"
     out, removed = tclib.clean_untrusted(text)
     assert out == "pay now[hidden text removed] end"
     assert any("zero-width" in r for r in removed) and "hidden tag characters" in removed
@@ -524,7 +524,7 @@ def test_audit_syslog_rfc5424():
     head = re.match(r'<(\d+)>1 (\S+) docktopus tentaclai - service \[tentaclai@32473 ', m)
     assert head and int(head.group(1)) == 13 * 8 + 4 and head.group(2) == e["ts"]
     assert r'service="demo\]db"' in m and r'action="say \"hi\" \\ there"' in m and 'origin_tmux="claude-workspace"' in m
-    assert m.split("] ", 1)[1].startswith("﻿denied: demo]db")
+    assert m.split("] ", 1)[1].startswith("\ufeffdenied: demo]db")
     old = tclib.audit_normalize({"ts": "2026-10-20T10:00:00+0200", "service": "x", "part": "api", "action": "a", "decision": "auto"})
     assert " 2026-10-20T10:00:00+02:00 " in tclib.audit_syslog(old)
 
