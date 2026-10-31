@@ -31,6 +31,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   about 1.1 GB.
 
 ### Changes / fixes
+- Prompt-injection scan: *asks to run commands* no longer fires on "run" or "call" as a noun – "a dry run of `svc config
+  put job`", "an svc call like `svc mail …`" in tentaclAI's own source; an instruction to run an `svc` command is still
+  flagged (#79).
 - Prompt-injection hook: reading the same content with the same findings again in one session (a job working on
   tentaclAI's own scanner tests) gives Claude a one-line reminder instead of the full warning; changed content or a new
   session warns in full. tentaclAI's scanner writes the invisible characters it looks for as escapes, so reading its
