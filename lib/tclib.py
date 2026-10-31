@@ -888,7 +888,8 @@ INJECTION_PATTERNS = [
         r"|\"role\"\s*:\s*\"system\"|^(Human|Assistant):\s)", _I)),
     ("addresses an AI agent", re.compile(
         r"\b(as an? (ai|llm|language model)|as an? (assistant|agent),? you|dear (ai|assistant|agent|claude)|(hey|hi|attention),? (claude|ai|assistant|agent))\b"
-        r"|^\s*claude[,:]", _I)),
+        r"|^\s*claude[,:]"
+        r"|(^|[.!?]\s+)as an? (assistant|agent)\b[,:]?\s*(your?\b|(?!(of|for|in|at|on|with|from|to|by)\b)\w+ (the|all|now)\b)", _I)),
     ("addresses an AI agent", re.compile(  # notes for whoever reads this with an AI – plain documents never talk like that
         r"\b(notes?|message|instructions?|info|reminder) (to|for) (any |all )?(ai|llm|automated|autonomous)\b[ \w-]{0,20}\b(assistants?|agents?|models?|systems?|tools?|readers?)\b"
         r"|\b(if|when) you(\s*['’]re| are) (an? )?(ai|llm|language model|ai assistant|ai agent|automated (assistant|agent|system))\b"
