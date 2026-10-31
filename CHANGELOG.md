@@ -31,6 +31,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   about 1.1 GB.
 
 ### Changes / fixes
+- Jobs: a run is told which weaknesses of tentaclAI the user already reported or dismissed under *For tentaclAI*
+  (the latest 15), so it doesn't report the same one again in every run.
 - Prompt-injection scan: *asks to run commands* no longer fires on "run" or "call" as a noun – "a dry run of `svc config
   put job`", "an svc call like `svc mail …`" in tentaclAI's own source; an instruction to run an `svc` command is still
   flagged (#79).
