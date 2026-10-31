@@ -133,6 +133,8 @@ SYSTEM = ("This is an unattended scheduled job of tentaclAI named {name!r}; nobo
           "the summary.{ro}")
 SYSTEM_RO = (" This run is read-only: tentacles can only be read, files in the sandbox can't be edited – report what "
              "should be done instead of trying it. Bash allows only svc and these text tools (also in pipes and chains): {helpers}.")
+SYSTEM_SLEEP = (" To wait, chain sleep with the check that follows (`sleep 60 && svc …`) – Claude Code blocks a sleep on "
+                "its own, and one in the background doesn't wait.")
 READ_ONLY_TOOLS = "Read,Grep,Glob,WebFetch,WebSearch,Bash(svc:*)"
 # text tools a read-only job may chain with svc (`svc … | head`) – Settings → Jobs (JOB_READONLY_HELPERS)
 HELPERS_DEFAULT = ("echo", "head", "tail", "grep", "jq", "sort", "uniq", "wc", "cut", "tr", "date", "sleep")
@@ -782,7 +784,10 @@ def claude_argv(job, run_id, session_id):
     model = job.get("model") or m.get("main") or ""
     effort = job.get("effort") or m.get("effort") or ""
     ro = job.get("profile") != "standard"
-    system = SYSTEM.format(name=job["name"], ro=SYSTEM_RO.format(helpers=", ".join(readonly_helpers()) or "none") if ro else "")
+    helpers = readonly_helpers() if ro else []
+    system = SYSTEM.format(name=job["name"], ro=SYSTEM_RO.format(helpers=", ".join(helpers) or "none") if ro else "")
+    if "sleep" in helpers:
+        system += SYSTEM_SLEEP
     context = mention_context(job)
     if context:
         system += " Tentacles named in the task (@name): " + "; ".join(context) + "."
@@ -802,7 +807,7 @@ def claude_argv(job, run_id, session_id):
     if effort:
         argv += ["--effort", effort]
     if ro:
-        tools = ",".join([READ_ONLY_TOOLS] + [f"Bash({h}:*)" for h in readonly_helpers()]
+        tools = ",".join([READ_ONLY_TOOLS] + [f"Bash({h}:*)" for h in helpers]
                          + [f"mcp__{n}" for n in servers])  # svc offers a read-only job only their reading tools
         argv += ["--permission-mode", "dontAsk", "--allowedTools", tools, "--disallowedTools", "Edit,Write,NotebookEdit"]
     else:
