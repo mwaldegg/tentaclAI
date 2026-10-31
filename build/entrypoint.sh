@@ -126,5 +126,7 @@ svc sync || echo "svc sync failed – container starts anyway"
 exec setpriv --reuid=claude --regid=claude --init-groups env -i HOME=/home/claude USER=claude LOGNAME=claude SHELL=/bin/bash \
     PATH="$PATH" LANG="${LANG:-C.UTF-8}" LC_ALL="${LC_ALL:-C.UTF-8}" TERM="${TERM:-xterm-256color}" TZ="${TZ:-UTC}" \
     TC_DIR="$TC_DIR" NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}" DISABLE_AUTOUPDATER="${DISABLE_AUTOUPDATER:-1}" \
+    PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-}" PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD="${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-}" \
+    NODE_PATH="${NODE_PATH:-}" COREPACK_ENABLE_DOWNLOAD_PROMPT="${COREPACK_ENABLE_DOWNLOAD_PROMPT:-0}" \
     HTTP_PROXY="${HTTP_PROXY:-}" HTTPS_PROXY="${HTTPS_PROXY:-}" NO_PROXY="${NO_PROXY:-}" \
     http_proxy="${HTTP_PROXY:-}" https_proxy="${HTTPS_PROXY:-}" no_proxy="${NO_PROXY:-}" "$@"

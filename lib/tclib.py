@@ -873,6 +873,7 @@ def clean_untrusted(text):
 
 
 _I = re.IGNORECASE | re.MULTILINE
+_NOUN_BEFORE = ("a", "an", "the", "dry", "test", "each", "every", "this", "one", "single", "first", "last", "next", "svc")  # "a run", "dry run" …
 INJECTION_PATTERNS = [
     ("asks to ignore instructions", re.compile(
         r"\b(ignore|disregard|forget|override|bypass)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all|any|your|the)\b[^.\n]{0,25}"
@@ -898,7 +899,9 @@ INJECTION_PATTERNS = [
         r"|\b(falls|wenn) du (eine |ein )?(ki|llm|sprachmodell|ki-assistent\w*|ki-agent\w*|automatisierte\w* (assistent|agent)\w*) bist\b"
         r"|\b(an alle|liebe) (ki|ki-\w+)\b", _I)),
     ("asks to run commands", re.compile(  # svc is this sandbox's own gateway – no ordinary document tells a reader to run it
-        r"\b(run|execute|call|use|type|führe?)\b[^.\n]{0,30}`?\bsvc (docker|compose|ssh|files|mail|db|web|git|config|[a-z0-9_-]+ (POST|PUT|PATCH|DELETE))\b"
+        # only the verb: "a dry run of `svc config …`", "an svc call like svc mail …" describe, they don't ask (#79)
+        "".join(rf"(?<!\b{w} )" for w in _NOUN_BEFORE)
+        + r"\b(run|execute|call|use|type|führe?)\b(?!\s+(of|like|to|for)\b)[^.\n]{0,30}`?\bsvc (docker|compose|ssh|files|mail|db|web|git|config|[a-z0-9_-]+ (POST|PUT|PATCH|DELETE))\b"
         r"|\b(run|execute)\b[^.\n]{0,20}`?(rm -rf /|sudo rm\b|mkfs\b|dd if=)", _I)),
     ("asks to send secrets somewhere", re.compile(
         r"\b(send|forward|upload|post|exfiltrate|leak|e-?mail|schicke?|sende|leite)\b[^\n]{0,80}"

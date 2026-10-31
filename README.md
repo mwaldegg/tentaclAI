@@ -215,7 +215,15 @@ svc jobs [name|--group G] [--steps]         # scheduled jobs (one group), a defi
 svc pending | audit [n]                     # approvals waiting in tentacontrol (also in Claude's status line) / last writes
 # tab completion for all of these in the sandbox shells
 tc-scan                                     # read-only inventory of all docker hosts, services, SSH hosts
+tc-shot <url|file.html> <out.png> [--full]  # screenshot with the built-in headless Chromium (through the gateway)
 ```
+
+For web apps the image also brings **Playwright 1.64.1** (Node: `require('playwright')`, Python:
+`playwright.sync_api`) with headless Chromium in `/opt/pw-browsers` (`executablePath: '/opt/pw-browsers/chromium'` for
+projects that pin another version), fonts with umlauts and emoji, gcc/make (`build-essential`, `python3-dev`), `uv`,
+`pnpm` (corepack), `sqlite3`, ShellCheck and ImageMagick. Claude runs an app on the sandbox's localhost, takes
+screenshots and looks at them – no browser download at run time. Change the version with the build argument
+`PLAYWRIGHT_VERSION` (npm and pip package use the same one).
 
 Claude commands: **`/onboard <service>`** and **`/inventory`** (see above).
 

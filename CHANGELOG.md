@@ -23,7 +23,17 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   A PDF that can't be read gets *PDF text not checked* on its audit entry. Base64 inside text (a mail, a page, `cat`)
   is still a finding.
 
+- **Browser and web-app tools in the sandbox:** Playwright 1.64.1 for Node and Python with headless Chromium in
+  `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`), fonts for umlauts and emoji, and
+  `tc-shot <url|file> <out.png>` for screenshots through the gateway – Claude can look at the web app it builds. Also
+  gcc/make, `python3-dev`, `uv`, `pnpm`, `sqlite3`, ShellCheck and ImageMagick. Claude's instructions describe them and
+  the rules for screenshots (only of what the task is about, no private photos in published ones). The image grows by
+  about 1.1 GB.
+
 ### Changes / fixes
+- Prompt-injection scan: *asks to run commands* no longer fires on "run" or "call" as a noun – "a dry run of `svc config
+  put job`", "an svc call like `svc mail …`" in tentaclAI's own source; an instruction to run an `svc` command is still
+  flagged (#79).
 - Prompt-injection hook: reading the same content with the same findings again in one session (a job working on
   tentaclAI's own scanner tests) gives Claude a one-line reminder instead of the full warning; changed content or a new
   session warns in full. tentaclAI's scanner writes the invisible characters it looks for as escapes, so reading its
@@ -73,11 +83,18 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   flagged as addressing an AI agent (#63).
 - Jobs: a refused group move (e.g. to `*`) no longer leaves the group menu showing the rejected group – the page
   reloads with the job's actual group and the error (#66).
+- Injection scan: "As an agent, run …", "As an assistant: …" and "As an agent your task …" are flagged as addressing
+  an AI agent again – #63 had dropped them along with the harmless prose forms (#68).
+- `svc git fetch`/`pull` no longer delete local tags that were never pushed – only remote branches are pruned (#74).
+- Jobs: a job moved to another group in the editor or with `svc config put job` is now last in its new group, as with
+  the card's group menu – it kept its old position number and could run first in *Run the group in order* (#76).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
   recreating `tentaclai` ends running sessions and Remote Control. The sandbox image now contains `poppler-utils`
-  (`pdftotext`). Nothing else to do.
+  (`pdftotext`) and Playwright with headless Chromium, compilers and web-app tools (about 1.1 GB more; the first build
+  downloads Chromium). A project that ran `playwright install` itself can delete `~/.cache/ms-playwright`. Nothing
+  else to do.
 
 ## v0.23.0 – 2026-10-26
 
