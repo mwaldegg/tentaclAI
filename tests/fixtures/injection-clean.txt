@@ -38,3 +38,5 @@ automatically. API keys can be rotated under Settings → Security.
 Please forward this mail to the whole team so everybody knows about the maintenance window on Saturday.
 =====
 Central management: this installation as an agent of the central server pulls its profile; the proxy runs as an assistant process.
+=====
+We hired her as an assistant for the shop. As an agent of the central server, the installation pulls the profile.
