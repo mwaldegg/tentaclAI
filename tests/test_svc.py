@@ -1028,3 +1028,22 @@ def test_configure_repo_sets_and_drops_the_author(monkeypatch):
     calls.clear()
     svc.configure_repo("repo", "/tmp/x", {})  # never set by svc: a local identity stays
     assert ["config", "--unset", "user.name"] not in calls
+
+
+def test_bundle_to_claude_keeps_local_only_tags(tmp_path, monkeypatch):
+    def git(*args, cwd):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args], cwd=cwd, check=True,
+                       capture_output=True)
+    mirror, work = tmp_path / "mirror", tmp_path / "work"
+    git("init", "--quiet", "-b", "main", str(mirror), cwd=tmp_path)
+    git("commit", "--quiet", "--allow-empty", "-m", "one", cwd=mirror)
+    git("tag", "v1", cwd=mirror)
+    git("clone", "--quiet", str(mirror), str(work), cwd=tmp_path)
+    git("tag", "local-only", cwd=work)
+    git("tag", "-d", "v1", cwd=mirror)
+    git("tag", "v2", cwd=mirror)
+    monkeypatch.setattr(svc, "mirror_fetch", lambda name, g: "main")
+    monkeypatch.setattr(svc, "mirror_path", lambda name: str(mirror))
+    assert svc.bundle_to_claude("repo", {"url": "https://example.com/r.git"}, str(work))
+    tags = subprocess.run(["git", "tag", "-l"], cwd=work, capture_output=True, text=True).stdout.split()
+    assert "local-only" in tags and "v2" in tags

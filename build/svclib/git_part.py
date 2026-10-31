@@ -99,8 +99,9 @@ def bundle_to_claude(name, git, path):
                 return False
             claude_git(["remote", "set-url", "origin", git["url"]], path)
             return True
-        return claude_git(["fetch", "--quiet", "--prune", b, "+refs/heads/*:refs/remotes/origin/*", "+refs/tags/*:refs/tags/*"],
-                          path).returncode == 0
+        # --prune only for branches: with a tags refspec it would also delete local tags that were never pushed
+        return (claude_git(["fetch", "--quiet", "--prune", b, "+refs/heads/*:refs/remotes/origin/*"], path).returncode == 0
+                and claude_git(["fetch", "--quiet", b, "+refs/tags/*:refs/tags/*"], path).returncode == 0)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
 
