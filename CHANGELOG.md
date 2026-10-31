@@ -59,6 +59,10 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   was refused for without knowing them (#44).
 - Services: the setup hint of a second service from the same template (e.g. PatchMon) names that service's own
   variables instead of the first one's (#54).
+- tc-guard: when it flags a possible prompt injection in a PDF it could not (fully) read, the flagged audit entry and
+  the notification now also say *PDF text not checked* / *PDF text partly checked* (#50).
+- Jobs: `*` is refused as a group name – it is the value of the All tab and made a tab that could not be selected (#55).
+- `svc jobs` lists jobs without a group last, also after groups starting with a non-ASCII letter (e.g. `Über…`) (#59).
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
