@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v7
       # image layers from the Actions cache – without it every run builds the three images from scratch (~1 min)
       - uses: docker/setup-buildx-action@v3
-      - uses: crazy-max/ghaction-github-runtime@v3   # hands the cache endpoint to `docker compose build` (type=gha)
+      - uses: crazy-max/ghaction-github-runtime@v4   # hands the cache endpoint to `docker compose build` (type=gha)
       - name: Sandbox and egress tests
         run: scripts/test-sandbox.sh
         env:
