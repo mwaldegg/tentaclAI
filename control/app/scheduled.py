@@ -642,7 +642,8 @@ def move(jid, step):
 
 
 def tabs(rows):
-    """the tab bar of the Jobs page, one tab per group: [(name, jobs, worst light of their last runs, how many have it)];
+    """the tab bar of the Jobs page, one tab per group: [(name, jobs, worst light of their last runs, how many have it,
+    proposals still to pick)];
     "" collects the jobs without a group; empty when no job has one"""
     names = sorted({r.get("group") or "" for r in rows}, key=lambda g: (g == "", g.lower()))
     if names in ([], [""]):
@@ -652,7 +653,8 @@ def tabs(rows):
         mine = [r for r in rows if (r.get("group") or "") == g]
         lights = [_light(r["last_run"]) for r in mine if r.get("last_run")]
         worst = "alert" if "alert" in lights else "warn" if "warn" in lights else ""
-        out.append((g, len(mine), worst, lights.count(worst) if worst else 0))
+        waiting = sum(open_proposals(x) for r in mine for x in r.get("runs") or [])
+        out.append((g, len(mine), worst, lights.count(worst) if worst else 0, waiting))
     return out
 
 
@@ -1287,7 +1289,7 @@ def unseen():
 def state_token():
     """changes whenever a run is queued, starts, ends – or a job is added, edited, paused"""
     import hashlib
-    h = _history_view()[-50:]
+    h = [r for r in _history_view()[:-50] if open_proposals(r)] + _history_view()[-50:]  # older ones a card still shows
     raw = json.dumps([(r.get("id"), r.get("status"), [x.get("state") for x in (r.get("actions") or []) + (r.get("knowledge") or [])],
                        (r.get("prompt_suggestion") or {}).get("state")) for r in h]) \
         + str(os.path.getmtime(JOBS) if os.path.exists(JOBS) else 0)
@@ -1304,8 +1306,8 @@ def open_proposals(run, now=None):
 
 def pending_proposals():
     """proposals waiting for the user's pick – the pulsing badge next to Jobs"""
-    now = time.time()
-    return sum(open_proposals(r, now) for r in _history_view())
+    now, jobs = time.time(), load()
+    return sum(open_proposals(r, now) for r in _history_view() if r.get("job") in jobs)  # a deleted job's card is gone
 
 
 def _run(run_id):
@@ -1431,6 +1433,8 @@ def use_prompt(run_id, use=True):
         job = get(run.get("job"))
         if job is None:
             raise ValueError("the job was deleted")
+        if p.get("base") is not None and p["base"] != job.get("prompt"):  # it would silently undo a later change
+            raise ValueError("the job's task changed since this run – take the suggestion over by hand in the editor")
         form = form_from_definition(dict(definition(job), prompt=p["text"]))
         save(form, run["job"])
     p["state"] = "used" if use else "discarded"
@@ -1486,7 +1490,7 @@ def overview():
         writes, asks = reach(job, known)
         unknown = [n for n in mentions(job.get("prompt")) if n not in known]  # renamed or removed since
         rows.append(dict(job, id=jid, unknown=unknown, when=describe(job["schedule"]), changed=job.get("builtin") and job.get("prompt") != job.get("builtin_prompt"), last_run=runs[-1] if runs else None, writes=writes, asks=asks,
-                         runs=list(reversed([r for r in runs[:-10] if open_proposals(r)] + runs[-10:])), busy=jid in _current.values() or any(r["status"] in ("queued", "running") for r in runs)
+                         runs=list(reversed([r for r in runs[:-10] if open_proposals(r)][-10:] + runs[-10:])), busy=jid in _current.values() or any(r["status"] in ("queued", "running") for r in runs)
                          or any(x.get("state") in ("queued", "running") for r in runs for x in r.get("actions") or [])))
     return rows
 

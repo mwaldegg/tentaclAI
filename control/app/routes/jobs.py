@@ -13,7 +13,7 @@ from ..web import TC_VERSION, page, respond, sync_services, templates
 
 router = APIRouter()
 templates.env.globals.update(prompt_diff=scheduled.prompt_diff, words=scheduled.words, md=scheduled.md,
-                             waiting=lambda runs: sum(scheduled.open_proposals(r) for r in runs or []))  # proposals still to pick  # a prompt suggestion as a diff
+                             waiting=lambda runs: sum(scheduled.open_proposals(r) for r in runs or []))  # a prompt suggestion as a diff; proposals still to pick
 
 
 def _job_page(request, jid=None, job=None):

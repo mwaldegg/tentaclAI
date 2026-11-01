@@ -117,6 +117,13 @@ def test_apply_knowledge_and_use_prompt(sj_module, scratch, monkeypatch, tmp_pat
     assert sj.improves({}) and not sj.improves({"improve": False})  # older jobs: on
     with pytest.raises(ValueError, match="no open prompt"):
         sj.use_prompt("r1")
+    stale = {"id": "r2", "job": "check", "status": "done",
+             "prompt_suggestion": {"text": "old idea", "base": "Check @demoapi", "why": "w", "state": "proposed"}}
+    jsonstore.save(sj.HISTORY, sj.history() + [stale, dict(stale, id="r3", job="gone")])
+    assert sj.pending_proposals() == 1  # the deleted job's run has no card – it doesn't count
+    with pytest.raises(ValueError, match="task changed since this run"):
+        sj.use_prompt("r2")  # its base is no longer the job's prompt – it would undo the later change
+    assert sj.get("check")["prompt"] == "Check @demoapi with paging"
 
 
 def test_templates_name_the_budget(sj_module):

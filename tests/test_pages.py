@@ -651,6 +651,7 @@ def test_job_badge_prefers_waiting_proposals(client, app_module, monkeypatch, tm
     from app import jsonstore, scheduled
     for k, f in (("JOBS", "j.json"), ("HISTORY", "h.json"), ("SEEN", "s.json")):
         monkeypatch.setattr(scheduled, k, str(tmp_path / f))
+    scheduled.save({"name": "x", "prompt": "p", "kind": "manual"}, new_id="x")  # only a job's own runs count
     acts = [{"title": "a", "command": "svc m move 1 Junk", "state": "proposed"}, {"title": "b", "command": "svc m move 2 Junk", "state": "proposed"},
             {"title": "c", "command": "svc m move 3 Junk", "state": "done"}]
     jsonstore.save(scheduled.HISTORY, [{"id": "r1", "job": "x", "status": "done", "ended": time.time() - 100, "result": {"status": "warn"},

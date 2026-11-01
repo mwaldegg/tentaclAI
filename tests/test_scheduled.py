@@ -481,7 +481,7 @@ def test_job_tabs(sj, monkeypatch, tmp_path):
     rows = [{"group": "Ops", "last_run": {"status": "done", "result": {"status": "warn"}}},
             {"group": "Ops", "last_run": {"status": "failed"}}, {"group": "", "last_run": None},
             {"group": "B", "last_run": {"status": "done", "result": {"status": "ok"}}}]
-    assert sj.tabs(rows) == [("B", 1, "", 0), ("Ops", 2, "alert", 1), ("", 1, "", 0)]  # no tab last
+    assert sj.tabs(rows) == [("B", 1, "", 0, 0), ("Ops", 2, "alert", 1, 0), ("", 1, "", 0, 0)]  # no tab last
     assert sj.tabs([{"group": "", "last_run": None}]) == []  # nobody uses tabs: no tab bar
 
 
