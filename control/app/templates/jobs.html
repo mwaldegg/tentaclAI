@@ -132,7 +132,7 @@
 {% if tabs %}
 <nav class="tabs job-tabs" aria-label="Job groups">
   <a href="/jobs?tab=*" class="{{ 'active' if tab == '*' }}">All <span class="faint">{{ all_rows | length }}</span></a>
-  {% for g, n, worst, k in tabs %}<a href="/jobs?tab={{ g | urlencode }}" class="{{ 'active' if tab == g }}"{% if not g %} title="jobs without a group"{% endif %}>{{ g or 'No group' }} <span class="faint">{{ n }}</span>{% if worst %} <span class="pill {{ 'err' if worst == 'alert' else 'warn' }}" title="{{ k }} job{{ '' if k == 1 else 's' }} with {{ worst }} in the last run">{{ k }}</span>{% endif %}</a>{% endfor %}
+  {% for g, n, worst, k in tabs %}<a href="/jobs?tab={{ g | urlencode }}" class="{{ 'active' if tab == g }}"{% if not g %} title="jobs without a group"{% endif %}>{{ g or 'No group' }} <span class="faint">{{ n }}</span>{% if worst %} <span class="pill {{ 'err' if worst == 'alert' else 'warn' }}" title="{{ k }} job{{ '' if k == 1 else 's' }} with {{ worst }} in the last run">{{ k }}</span>{% endif %}{% set w = waiting(all_rows | selectattr('group', 'equalto', g or None) | map(attribute='runs') | sum(start=[])) if g else waiting(all_rows | rejectattr('group') | map(attribute='runs') | sum(start=[])) %}{% if w %} <span class="pill accent" title="{{ w }} proposal{{ '' if w == 1 else 's' }} to pick">{{ w }} to pick</span>{% endif %}</a>{% endfor %}
 </nav>
 {% set ordered = tab not in ('*', '') and rows | length > 1 %}
 {% if tab not in ('*', '') and rows %}
@@ -166,8 +166,9 @@
   <div style="margin-top:12px">
     {{ run_row(j.runs[0]) }}
     {% if j.runs | length > 1 %}
-    <details class="job-history"{% if j.runs[1:] | selectattr('id', 'in', new_ids) | list %} open{% endif %}>
-      <summary class="small muted">History ({{ j.runs | length - 1 }} earlier run{{ '' if j.runs | length == 2 else 's' }})</summary>
+    {% set w = waiting(j.runs[1:]) %}
+    <details class="job-history"{% if w or j.runs[1:] | selectattr('id', 'in', new_ids) | list %} open{% endif %}>
+      <summary class="small muted">History ({{ j.runs | length - 1 }} earlier run{{ '' if j.runs | length == 2 else 's' }}){% if w %} <span class="pill accent">{{ w }} to pick</span>{% endif %}</summary>
       {% for r in j.runs[1:] %}{{ run_row(r) }}{% endfor %}
     </details>
     {% endif %}

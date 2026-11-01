@@ -31,6 +31,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   about 1.1 GB.
 
 ### Changes / fixes
+- Jobs: a proposal still to pick in an older run (e.g. a finding under *For tentaclAI*) was hidden in the folded
+  history while the sidebar counted it – the history opens and shows "1 to pick", the group tab too.
 - Jobs: a run's details are shown folded under *Details* and rendered (tables, lists, bold, code, links) instead
   of raw Markdown; title and summary are asked to say what the user should do, not how the run worked.
 - Jobs: a run is told which weaknesses of tentaclAI the user already reported or dismissed under *For tentaclAI*

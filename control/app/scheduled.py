@@ -1486,7 +1486,7 @@ def overview():
         writes, asks = reach(job, known)
         unknown = [n for n in mentions(job.get("prompt")) if n not in known]  # renamed or removed since
         rows.append(dict(job, id=jid, unknown=unknown, when=describe(job["schedule"]), changed=job.get("builtin") and job.get("prompt") != job.get("builtin_prompt"), last_run=runs[-1] if runs else None, writes=writes, asks=asks,
-                         runs=list(reversed(runs[-10:])), busy=jid in _current.values() or any(r["status"] in ("queued", "running") for r in runs)
+                         runs=list(reversed([r for r in runs[:-10] if open_proposals(r)] + runs[-10:])), busy=jid in _current.values() or any(r["status"] in ("queued", "running") for r in runs)
                          or any(x.get("state") in ("queued", "running") for r in runs for x in r.get("actions") or [])))
     return rows
 

@@ -1069,3 +1069,19 @@ def test_audit_rows_show_the_source(client, app_module):
     row = html[html.index('data-audit-row'):]
     row = row[:row.index("audit-detail")]
     assert 'class="faint audit-source"' in row and "source%3A" in row and "5e194a13" in row  # tentacontrol's own label
+
+
+def test_a_proposal_in_an_old_run_opens_the_history_and_marks_the_tab(client, app_module, monkeypatch, tmp_path):
+    from app import jsonstore, scheduled
+    for k, f in (("JOBS", "j.json"), ("HISTORY", "h.json"), ("SEEN", "s.json")):
+        monkeypatch.setattr(scheduled, k, str(tmp_path / f))
+    a = scheduled.save({"name": "Review", "prompt": "p", "kind": "manual", "group": "Dev"})
+    scheduled.save({"name": "Disk check", "prompt": "p", "kind": "manual"})
+    old = {"id": "r0", "job": a, "name": "x", "status": "done", "queued": 1, "ended": 2, "result": {"status": "ok", "title": "old"},
+           "knowledge": [{"target": "product", "name": "svc", "op": "add", "new": "svc misses --x", "why": "w", "state": "proposed"}]}
+    later = [{"id": f"r{i}", "job": a, "name": "x", "status": "done", "queued": i, "ended": i + 1, "result": {"status": "ok", "title": "t"}}
+             for i in range(1, 12)]  # more runs than the card shows
+    jsonstore.save(scheduled.HISTORY, [old] + later)
+    html = client.get("/jobs?tab=*").text
+    assert '<details class="job-history" open>' in html and "svc misses --x" in html
+    assert 'title="1 proposal to pick">1 to pick</span>' in html and '<span class="pill accent">1 to pick</span>' in html
