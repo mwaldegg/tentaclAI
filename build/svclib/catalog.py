@@ -72,7 +72,7 @@ def cmd_test(services, name):
             if m.get("type", "http") in ("http", "sse"):
                 hdr = [f"{k}: {v}" for k, v in (m.get("headers") or {}).items()]
                 cfg = [f"url = {api_part._q(m['url'])}", 'header = "Accept: application/json, text/event-stream"'] + [f"header = {api_part._q(h)}" for h in hdr]
-                rc, out, err = api_part._curl_secret(["-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10"] + (["-k"] if m.get("insecure_tls") else []), cfg)
+                rc, out, err = api_part._curl_secret(name, ["-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10"] + (["-k"] if m.get("insecure_tls") else []), cfg)
                 good = rc == 0 and out not in ("", "000", "401", "403", "404")
                 report("mcp", good, f"{m['url']} reachable → HTTP {out or '–'}" + (" (authentication rejected)" if out in ("401", "403") else ""))
             else:

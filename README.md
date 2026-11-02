@@ -287,7 +287,7 @@ every write wait for your approval in tentacontrol → **Approvals** (denied or 
 The names before v0.16, `ro` and `rw`, still work as `read` and `write`; tentacontrol rewrites them on start (with a
 backup) and only writes the new ones. An unknown value counts as `read`.
 **MCP tool calls** go through the same gate: every MCP server is registered in Claude as `svc mcp-proxy <name>` (http
-bridged with the tokens added, stdio as a child process run by `tcrun`), which sees each tool call. Tools the server marks
+bridged with the tokens added, stdio as a child process run by the service's own user), which sees each tool call. Tools the server marks
 read-only (`readOnlyHint`) run freely and are logged as reads; every other tool is a write – `read` hides and blocks it,
 `write` logs it, `confirm` asks first; a tool marked `destructiveHint` is a risky write (asked on its own, even during a
 grant). Correct the server's marks with `"read_tools"` / `"write_tools"` (names or `fnmatch` patterns) in the `mcp`
@@ -458,8 +458,9 @@ What tentaclAI does:
 
 - **Privilege separation** in the sandbox: Claude runs as the unprivileged user `claude`. `.env`, the SSH key, the service
   files, git credentials and the audit log belong to root; Claude reaches them only through `svc` (via sudo), which enforces
-  the access modes. Client tools (curl, psql, mariadb, stdio MCP servers) run as a third user `tcrun` with only the secret
-  they need. Every MCP server runs behind `svc mcp-proxy`, git pushes go through a root-owned mirror – Claude never sees a
+  the access modes. Client tools (curl, psql, mariadb, stdio MCP servers) run as a user of their service (`tcr-<service>`,
+  created on first use) with only that service's secret – one service's tool can't read another's environment,
+  secret files or cookie jars. Every MCP server runs behind `svc mcp-proxy`, git pushes go through a root-owned mirror – Claude never sees a
   token or the private key, and can't change its own access modes (`svc config put` always needs your approval).
 - **tentacontrol is out of Claude's reach:** from the sandbox only `svc`'s endpoints for approvals and job proposals answer
   (with its token; an unrecognised address from the sandbox network counts as the sandbox);
@@ -473,8 +474,9 @@ What it does **not** (yet) do – keep it in mind:
 
 - An `write` Docker host – or an SSH user with unrestricted sudo – is effectively **root on that machine**. The sandbox
   itself never gets a Docker socket: docker hosts, this one included, are reached over SSH only.
-- `tcrun` holds one secret at a time while a client runs: a shell escape in the interactive SQL shell (`\!`, approved
-  separately in `confirm` mode) gets that user, its database password and the web cookie jars – not `.env` or the SSH key.
+- A service's client user holds that service's secret while a client runs: a shell escape in the interactive SQL
+  shell (`\!`, approved separately in `confirm` mode) gets that user and its database password – not other services'
+  secrets, `.env` or the SSH key.
 - **Egress gateway:** the sandbox has no route to the outside; all traffic goes through `tentaclai-egress`. `permissive`
   allows and records everything; `enforce` allows only the built-in list, your tentacles and your allowlist and
   asks you about the rest; `learn` (new installations) starts permissive and switches to `enforce` after an hour. Allowed destinations are still ways out – what Claude may *do* there is up to `svc`.

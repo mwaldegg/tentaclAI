@@ -68,12 +68,12 @@ COPY build/svc-completion.bash /etc/bash_completion.d/svc
 COPY VERSION /etc/tentaclai/VERSION
 COPY build/CLAUDE.base.md /etc/tentaclai/CLAUDE.base.md
 COPY build/commands/ /etc/tentaclai/commands/
-# Users: claude = the agent (no secrets, no keys), tcrun = client tools started by svc (one secret at a time).
+# Users: claude = the agent (no secrets, no keys); client tools started by svc run as one user per service
+# (tcr-<service>, uid 20000–29999, created by svc on first use, home /var/lib/tcrun/<service>) – one secret each.
 # Root holds .env, SSH keys and service files; Claude reaches them only through `svc`/`tc-scan` via sudo.
 ARG CLAUDE_UID=10000
 RUN groupadd -g ${CLAUDE_UID} claude && useradd -m -d /home/claude -u ${CLAUDE_UID} -g claude -s /bin/bash claude \
-    && groupadd -g 10001 tcrun && useradd -m -d /var/lib/tcrun -u 10001 -g tcrun -s /usr/sbin/nologin tcrun \
-    && chmod 700 /var/lib/tcrun \
+    && install -d -m 0711 -o root -g root /var/lib/tcrun \
     # env_keep: only these four names – where a request comes from (session, tmux pane), never
     # CLAUDE_CODE_SESSION_ACCESS_TOKEN or anything else of Claude's environment
     && printf '%s\n' 'Defaults:claude !lecture, env_reset, always_set_home' \

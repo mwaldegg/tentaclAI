@@ -83,10 +83,10 @@ architecture and `CONTRIBUTING.md` for the ground rules.
   request); tentacontrol's entries get the request id (`auditlog.write`). Where a write can't end svc (the MCP proxy
   answers a refused tool call and goes on) use `gate.admit()` / `gate.finish()` – the two halves of `guarded()`;
   MCP servers are always registered as `svc mcp-proxy` (`mcp_part.ToolGate`), never directly. Risk hints for approvals are `tclib.write_risks` – a grant never covers a risky write.
-- **Privilege separation:** Claude runs as user `claude`, `svc`/`tc-scan` as root via sudo, client tools as `tcrun`
-  (`runner()` in svc). Code running as root must never read, write or run git in paths Claude controls (workspace, its
+- **Privilege separation:** Claude runs as user `claude`, `svc`/`tc-scan` as root via sudo, client tools as
+  one user per service (`tcr-<service>`, `core.run_user()`/`runner(service)` in svc). Code running as root must never read, write or run git in paths Claude controls (workspace, its
   home) – hand files over as the other user (`as_user`, `write_as_claude`, staging dirs) and never pass Claude's
-  arguments to a root process that touches local files. New secrets go to the client tool via 0600 files/env of `tcrun`.
+  arguments to a root process that touches local files. New secrets go to the client tool via 0600 files/env of the service's user (`_shm_file(content, service)`).
 - **Test in stages**, never on a running installation:
   1. **After every change:** `scripts/test-quick.sh` (seconds, no Docker) – syntax, ShellCheck, site data, JSON/YAML,
      pytest unit tests in `tests/` (tclib, parsers, connector/skill state) and every tentacontrol page rendered with

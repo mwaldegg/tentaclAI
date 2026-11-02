@@ -44,12 +44,12 @@ def db_run(name, db, sql=None, fmt="table", interactive=False, ro=None):
             cmd.append("--csv")
         if sql is not None:
             cmd += ["-c", sql]
-        # psql runs as tcrun: shell escapes (\!) in the interactive shell get that user, not root
-        return subprocess.call(cmd, **core.runner(env)) if interactive or sql is not None else 0
+        # psql runs as the service's user: shell escapes (\!) in the interactive shell get that user, not root
+        return subprocess.call(cmd, **core.runner(name, env)) if interactive or sql is not None else 0
     addr, lport = core.tunnel(db.get("host", ""), db.get("port", 3306))
     cfg = core._shm_file("[client]\n" + "".join(f"{k}={v}\n" for k, v in (
         ("host", addr), ("port", lport), ("user", db.get("user", "")),
-        ("password", db.get("password", "")), ("database", db.get("database", ""))) if v != ""))
+        ("password", db.get("password", "")), ("database", db.get("database", ""))) if v != ""), name)
     try:
         cmd = ["mariadb", f"--defaults-extra-file={cfg}", "--connect-timeout=10", "--sandbox"]
         if db.get("ssl") in (True, "require", "true"):
@@ -60,7 +60,7 @@ def db_run(name, db, sql=None, fmt="table", interactive=False, ro=None):
             cmd.append("--init-command=SET SESSION TRANSACTION READ ONLY")
         if sql is not None:
             cmd += (["--batch"] if fmt == "csv" else ["--table"]) + ["-e", sql]
-        return subprocess.call(cmd, **core.runner())
+        return subprocess.call(cmd, **core.runner(name))
     finally:
         os.unlink(cfg)
 
@@ -112,15 +112,15 @@ def db_test(name, db):
         env = dict(PGHOST=str(db.get("host", "")), PGHOSTADDR=addr, PGPORT=str(lport), PGDATABASE=str(db.get("database", "")),
                    PGUSER=str(db.get("user", "")), PGPASSWORD=str(db.get("password", "")), PGSSLMODE=pg_sslmode(db),
                    PGCONNECT_TIMEOUT="8", PGOPTIONS="-c default_transaction_read_only=on")
-        r = subprocess.run(["psql", "-X", "-At", "-c", "SELECT version()"], capture_output=True, text=True, timeout=20, **core.runner(env))
+        r = subprocess.run(["psql", "-X", "-At", "-c", "SELECT version()"], capture_output=True, text=True, timeout=20, **core.runner(name, env))
     else:
         addr, lport = core.tunnel(db.get("host", ""), db.get("port", 3306))
         cfg = core._shm_file("[client]\n" + "".join(f"{k}={v}\n" for k, v in (
             ("host", addr), ("port", lport), ("user", db.get("user", "")),
-            ("password", db.get("password", "")), ("database", db.get("database", ""))) if v != ""))
+            ("password", db.get("password", "")), ("database", db.get("database", ""))) if v != ""), name)
         try:
             r = subprocess.run(["mariadb", f"--defaults-extra-file={cfg}", "--connect-timeout=8", "-N", "-e", "SELECT VERSION()"],
-                               capture_output=True, text=True, timeout=20, **core.runner())
+                               capture_output=True, text=True, timeout=20, **core.runner(name))
         finally:
             os.unlink(cfg)
     if r.returncode == 0:

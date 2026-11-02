@@ -46,19 +46,19 @@ def cmd_call(services, name, method, path, extra):
     files = []
     try:
         for content in ("\n".join(headers) + "\n", "\n".join(config) + "\n"):
-            files.append(core._shm_file(content))
-        # curl runs as tcrun: extra args (-o, -d @file, -K …) only reach what that user may read/write
+            files.append(core._shm_file(content, name))
+        # curl runs as the service's user: extra args (-o, -d @file, -K …) only reach what that user may read/write
         cmd = ["curl", "-q", "-sS", "-X", method.upper(), "-H", f"@{files[0]}", "-K", files[1]]
         if api.get("insecure_tls"):
             cmd.append("-k")
         if fail_on_http_error(extra):
             cmd.append("--fail-with-body")
         if method.upper() in ("GET", "HEAD", "OPTIONS"):
-            rc = safeguards.scanned("API response", name, "api", f"{method.upper()} {path}", cmd + list(extra), **core.runner())
+            rc = safeguards.scanned("API response", name, "api", f"{method.upper()} {path}", cmd + list(extra), **core.runner(name))
         else:
             body = " (with body)" if any(a in ("-d", "--data", "--data-raw", "--data-binary", "--json", "-F", "--form", "-T") for a in extra) else ""
             rc = gate.guarded(name, "api", gate.access_mode(svc["api"], "write"), f"{method.upper()} {path}{body}",
-                         lambda: subprocess.call(cmd + list(extra), **core.runner()))
+                         lambda: subprocess.call(cmd + list(extra), **core.runner(name)))
         doubled = doubled_prefix(api["base_url"], path)
         if rc and doubled:
             print(f"svc: the path starts with {doubled}, which the base URL already contains – try "
@@ -148,11 +148,11 @@ def doubled_prefix(base_url, path):
 
 # ---------- oauth2 (client credentials) ----------
 
-def _curl_secret(argv_head, config_lines):
-    """run curl (as tcrun) with secrets only in a 0600 config file on tmpfs; return stdout"""
-    cfg = core._shm_file("\n".join(config_lines) + "\n")
+def _curl_secret(service, argv_head, config_lines):
+    """run curl (as the service's user) with secrets only in a 0600 config file on tmpfs; return stdout"""
+    cfg = core._shm_file("\n".join(config_lines) + "\n", service)
     try:
-        r = subprocess.run(["curl", "-q", "-sS", *argv_head, "-K", cfg], capture_output=True, text=True, **core.runner())
+        r = subprocess.run(["curl", "-q", "-sS", *argv_head, "-K", cfg], capture_output=True, text=True, **core.runner(service))
         return r.returncode, r.stdout, r.stderr
     finally:
         os.unlink(cfg)
@@ -188,7 +188,7 @@ def oauth_token(name, auth, insecure=False):
     else:
         cfg.append(f"data-urlencode = {_q('client_id=' + auth['client_id'])}")
         cfg.append(f"data-urlencode = {_q('client_secret=' + auth['client_secret'])}")
-    rc, out, err = _curl_secret(["-k"] if insecure else [], cfg)
+    rc, out, err = _curl_secret(name, ["-k"] if insecure else [], cfg)
     try:
         data = json.loads(out)
         token = data["access_token"]

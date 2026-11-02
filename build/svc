@@ -38,8 +38,8 @@ resolved from the stack's .env (read fresh on every call) and the container envi
   svc files [name] ls|tree|cat|grep|pull|diff|push [path] files of a service with a files part (pull → /workspace/files/<name>)
 
 Privilege separation: Claude runs as user "claude" and calls svc through sudo; svc runs as root (it alone can read
-.env, the SSH keys and the service files) and starts client tools (curl, psql, mariadb, stdio MCP servers) as the
-unprivileged user "tcrun" with only the secret they need. Anything run as root never touches Claude's files directly.
+.env, the SSH keys and the service files) and starts client tools (curl, psql, mariadb, stdio MCP servers) as an
+unprivileged user of their service ("tcr-<service>") with only that service's secret. Anything run as root never touches Claude's files directly.
 
 The code lives in /usr/local/lib/tentaclai/svclib (build/svclib in the repository) – see its __init__.py.
 """

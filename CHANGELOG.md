@@ -30,6 +30,11 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   the rules for screenshots (only of what the task is about, no private photos in published ones). The image grows by
   about 1.1 GB.
 
+- **One user per service for client tools:** curl, psql, mariadb and stdio MCP servers of a service run as a user of
+  that service (`tcr-<service>`, uid 20000–29999, created by svc on first use, home `/var/lib/tcrun/<service>`)
+  instead of the shared `tcrun`. A client tool of one service can no longer read another service's secrets – the
+  environment of its running MCP server, its secret files in `/dev/shm`, its cookie jar.
+
 ### Changes / fixes
 - **Security – svc access modes (from a code review):**
   - API calls: extra curl arguments are an allowlist (body, headers, output, timing). `-X` turned a GET into a write
@@ -189,6 +194,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   `grep -nE '^[A-Za-z_][A-Za-z0-9_]*=.*[[:space:]]#' .env` (quoted values are fine).
 - Central management: a profile that switched a local module on reports it as *failed* now – switch it on in Modules.
 - Changing the password in tentacontrol (or `./tentaclai.sh passwd`) now signs out the other browsers – sign in there again.
+- The user `tcrun` is gone (rebuild of `claude`): client tools run as `tcr-<service>`. Web services with a form login
+  sign in once more (their cookie jars start empty). Scripts on the host that looked for `tcrun` processes need the new names.
 
 ## v0.23.0 – 2026-10-26
 

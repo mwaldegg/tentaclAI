@@ -195,7 +195,7 @@ check "sandbox can't open the tentacontrol login" "$(CTL http://tctest-control:8
 check "sandbox can't read the gateway policy" "$(CTL http://tctest-control:8080/internal/egress/policy)" "403"
 check "sandbox can't create network approvals" "$(CTL -X POST -H 'Content-Type: application/json' -d '{"host":"evil.test","port":443}' http://tctest-control:8080/internal/egress/ask)" "403"
 check "svc still reaches its approvals endpoint" "$($C svc pending >/dev/null 2>&1 && echo ok)" "ok"
-check "psql shell escape runs as tcrun" "$(echo '\! id -un' | $CI svc db testdbrw shell 2>/dev/null | tail -1)" "tcrun"
+check "psql shell escape runs as the service's own user" "$(echo '\! id -un' | $CI svc db testdbrw shell 2>/dev/null | tail -1)" "tcr-testdbrw"
 check "Claude takes a screenshot with the built-in browser" "$($C sh -c 'cd /tmp && printf "<h1>Grüße 🐙</h1>" > s.html && tc-shot s.html s.png >/dev/null && head -c 4 s.png | tail -c 3' 2>/dev/null)" "PNG"
 check "… Python Playwright finds the same browser" "$($C python3 -c 'from playwright.sync_api import sync_playwright as p; b = p().start().chromium.launch(); print("ok"); b.close()' 2>/dev/null)" "ok"
 fi
@@ -250,7 +250,7 @@ IUID="$($C svc mail testmail list 2>/dev/null | grep "$ISUBJ" | awk '{print $1}'
 check "mail: an injection attempt is flagged for Claude" "$($C svc mail testmail read "$IUID" 2>/dev/null | grep -c '⚠ svc: possible prompt injection' || true)" "1"
 check "mail: … and in the audit log" "$(docker exec tctest-claude grep -c '"decision": "flagged"' "$T/data/control/audit.jsonl" 2>/dev/null | grep -v '^0$' >/dev/null && echo yes || echo no)" "yes"
 check "mail: read-only job can't send" "$(J jobro01 'echo x | svc mail testmail send --to alice@example.com --subject ro')" "refused"
-# MCP: every tool call goes through svc's proxy – the stdio server runs as tcrun; reads run, writes wait for approval,
+# MCP: every tool call goes through svc's proxy – the stdio server runs as its service's user; reads run, writes wait for approval,
 # a refused call never reaches the server. One proxy session per call set, stdin open until its done file exists.
 docker cp "$SRC/tests/fixtures/fake_mcp.py" tctest-claude:/usr/local/share/fake_mcp.py && docker exec tctest-claude chmod 644 /usr/local/share/fake_mcp.py
 rm -f "$T"/mcp-*.done
@@ -266,7 +266,10 @@ mcp testmcp call & wait_for 20 grep -q '"id":10' "$T/mcp-call.out" || true
 check "mcp: a reading tool runs without approval" "$(grep '"id":10' "$T/mcp-call.out" | grep -c 'did get_state' || true)" "1"
 wait_for 30 sh -c "curl -s -b '$J' http://$IP:8080/partials/approvals | grep -q 'turn_on'" || true
 check "mcp: a write waits for approval with tool and arguments" "$(curl -s -b "$J" "http://$IP:8080/partials/approvals" | grep -c 'turn_on {&#34;entity&#34;: &#34;light.x&#34;}' || true)" "1"
-check "mcp: the stdio server runs as tcrun" "$(docker exec tctest-claude sh -c 'for p in /proc/[0-9]*; do c=$(tr "\0" " " < "$p/cmdline" 2>/dev/null); case "$c" in "python3 /usr/local/share/fake_mcp"*) stat -c %U "$p";; esac; done' | sort -u | tr '\n' ' ')" "tcrun "
+check "mcp: the stdio server runs as its service's user" "$(docker exec tctest-claude sh -c 'for p in /proc/[0-9]*; do c=$(tr "\0" " " < "$p/cmdline" 2>/dev/null); case "$c" in "python3 /usr/local/share/fake_mcp"*) stat -c %U "$p";; esac; done' | sort -u | tr '\n' ' ')" "tcr-testmcp "
+# another service's client tool (the approved psql shell of testdbrw) can't read the running server's environment
+check "mcp: another service can't read the server's environment" "$(printf '%s\n' '\! for p in /proc/[0-9]*; do case "$(tr "\0" " " < $p/cmdline 2>/dev/null)" in "python3 /usr/local/share/fake_mcp"*) cat $p/environ >/dev/null 2>&1 && echo open || echo sealed;; esac; done | sort -u' | $CI svc db testdbrw shell 2>/dev/null | tail -1)" "sealed"
+check "mcp: … nor its home" "$(echo '\! test -d /var/lib/tcrun/testmcp && (ls /var/lib/tcrun/testmcp >/dev/null 2>&1 && echo open || echo sealed)' | $CI svc db testdbrw shell 2>/dev/null | tail -1)" "sealed"
 decide approve; wait_for 30 grep -q '"id":11' "$T/mcp-call.out" || true; touch "$T/mcp-call.done"; wait
 check "mcp: … and runs once approved" "$(grep '"id":11' "$T/mcp-call.out" | grep -c 'did turn_on' || true)" "1"
 { rpc 1 initialize; rpc 12 tools/call '{"name":"wipe","arguments":{}}'; } > "$T/mcp-wipe.in"

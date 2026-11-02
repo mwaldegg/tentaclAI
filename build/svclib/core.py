@@ -1,5 +1,6 @@
-"""svc core: paths, privileges (sudo, the users claude and tcrun, files handed to Claude), loading services, systems and
+"""svc core: paths, privileges (sudo, the user claude and one user per service for client tools, files handed to Claude), loading services, systems and
 the .env, running client tools, tunnels through the egress gateway."""
+import hashlib
 import json
 import os
 import pwd
@@ -18,7 +19,7 @@ def _read(path):
         return ""
 
 
-CLAUDE_USER, RUN_USER = "claude", "tcrun"
+CLAUDE_USER = "claude"
 # egress gateway (all outbound traffic of the sandbox) – also under sudo, where the environment is reset
 PROXY = _read("/etc/tentaclai/proxy")
 if PROXY:
@@ -295,13 +296,45 @@ def _can_enter(pw, path):
     return bool(mode & 0o001) or (st.st_uid == pw.pw_uid and mode & 0o100) or (st.st_gid == pw.pw_gid and mode & 0o010)
 
 
-def runner(env=None):
-    """client tools (curl, psql, mariadb …) run as tcrun: they only get their own secret, never root"""
-    return as_user(RUN_USER, env)
+RUN_HOME = "/var/lib/tcrun"  # root's, 0711; one home per service below it (0700, that service's user)
+RUN_UIDS = (20000, 29999)
+SERVICE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,40}")
+
+
+def run_user(service):
+    """the user that runs a service's client tools (curl, psql, mariadb, a stdio MCP server): one per service, so a
+    tool of one service can't read another's secrets (/proc/<pid>/environ, its files in /dev/shm, cookie jars) –
+    created on first use (tcr-<service>, uid from RUN_UIDS, home RUN_HOME/<service>)"""
+    if not SERVICE_NAME.fullmatch(service or ""):
+        sys.exit(f"svc: invalid service name {service!r}")
+    user = "tcr-" + service if len(service) <= 28 else f"tcr-{service[:19]}-{hashlib.sha256(service.encode()).hexdigest()[:8]}"
+    if not privileged():
+        return user
+    home = os.path.join(RUN_HOME, service)
+    pw = _account(user)
+    if pw is None:
+        r = subprocess.run(["useradd", "-M", "-U", "-d", home, "-s", "/usr/sbin/nologin", "-K", f"UID_MIN={RUN_UIDS[0]}",
+                            "-K", f"UID_MAX={RUN_UIDS[1]}", "-K", f"GID_MIN={RUN_UIDS[0]}", "-K", f"GID_MAX={RUN_UIDS[1]}", user],
+                           capture_output=True, text=True)
+        pw = _account(user)  # also when a second svc call created it at the same moment
+        if pw is None:
+            sys.exit(f"svc: can't create the user for {service}: {r.stderr.strip()[-200:]}")
+    os.makedirs(RUN_HOME, mode=0o711, exist_ok=True)
+    try:
+        os.mkdir(home, 0o700)
+        os.chown(home, pw.pw_uid, pw.pw_gid)
+    except FileExistsError:
+        pass
+    return user
+
+
+def runner(service, env=None):
+    """client tools (curl, psql, mariadb …) run as the service's own user: only its own secret, never root"""
+    return as_user(run_user(service), env)
 
 
 def give(path, user):
-    """hand a file/tree created by root to a user (Claude's workspace files, tcrun's secret files)"""
+    """hand a file/tree created by root to a user (Claude's workspace files, a service user's secret files)"""
     pw = _account(user) if privileged() else None
     if pw is None:
         return
@@ -449,11 +482,11 @@ def tunnel(host, port):
     return "127.0.0.1", srv.getsockname()[1]
 
 
-def _shm_file(content):
-    """0600 file on tmpfs for secrets, readable by tcrun only (the client tool) – caller deletes it"""
+def _shm_file(content, service):
+    """0600 file on tmpfs for secrets, readable only by the service's user (the client tool) – caller deletes it"""
     with tempfile.NamedTemporaryFile("w", dir="/dev/shm", delete=False) as fh:
         fh.write(content)
-    give(fh.name, RUN_USER)
+    give(fh.name, run_user(service))
     return fh.name
 
 

@@ -104,10 +104,10 @@ class _HTMLText(HTMLParser):
 
 
 def web_paths(name):
-    """per-service cookie jar – created and used by tcrun, which runs curl"""
-    pw = core._account(core.RUN_USER) if core.privileged() else None
+    """the service's cookie jar – in the home of its user, created and used by it (it runs curl)"""
+    pw = core._account(core.run_user(name)) if core.privileged() else None
     jar = os.path.join(pw.pw_dir if pw else os.path.expanduser("~"), ".cache", "tentaclai", "web", f"{name}.cookies")
-    subprocess.run(["sh", "-c", 'umask 077; mkdir -p "$(dirname "$1")" && touch "$1"', "sh", jar], **core.runner())
+    subprocess.run(["sh", "-c", 'umask 077; mkdir -p "$(dirname "$1")" && touch "$1"', "sh", jar], **core.runner(name))
     return jar
 
 
@@ -143,7 +143,7 @@ def web_curl(name, web, url, method="GET", data_lines=(), out=None):
         cfg += [f'data-urlencode = {api_part._q(l)}' for l in data_lines]
     if web.get("insecure_tls"):
         cfg.append("insecure")
-    code, stdout, stderr = api_part._curl_secret([], cfg)
+    code, stdout, stderr = api_part._curl_secret(name, [], cfg)
     body, _, meta = stdout.rpartition("\n")
     parts = meta.split(" ", 2) + ["", "", ""]
     return code, parts[0], parts[1], parts[2], (body if code == 0 else stderr.strip())

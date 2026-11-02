@@ -1159,3 +1159,13 @@ def test_push_bundle_is_taken_only_as_a_plain_file(tmp_path):
     (stage / "push.bundle").write_bytes(b"bundle")
     svc.take_file(str(stage / "push.bundle"), str(tmp_path / "out3"))
     assert (tmp_path / "out3").read_bytes() == b"bundle"
+
+
+def test_one_run_user_per_service():
+    """client tools of each service run as a user of its own – a name within 32 characters, the same every time"""
+    assert svc.run_user("wiki") == "tcr-wiki"
+    long = "a" * 41
+    u = svc.run_user(long)
+    assert len(u) <= 32 and u == svc.run_user(long) and u != svc.run_user("a" * 40)
+    with pytest.raises(SystemExit):
+        svc.run_user("../etc")
