@@ -16,10 +16,16 @@ ENV_LINE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")
 
 
 def unquote(v):
+    """a value as compose reads it: inside its quotes (anything after the closing quote is ignored), unquoted up to
+    an inline comment – ` #` after whitespace (KEY=enforce # note is enforce; a # inside a word stays)"""
+    if re.match(r"\s+#", v):  # KEY= # note: no value, only a comment
+        return ""
     v = v.strip()
-    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
-        return v[1:-1]
-    return v
+    if v[:1] in ("'", '"'):
+        end = v.find(v[0], 1)
+        if end > 0:
+            return v[1:end]
+    return re.split(r"\s+#", v, maxsplit=1)[0]
 
 
 def read_env(path):
@@ -285,6 +291,13 @@ def is_ip(s):
         return False
 
 
+def plain_ip(a):
+    """an address as its own version: ::ffff:10.0.0.1 is 10.0.0.1 (an IPv4 rule must match it)"""
+    import ipaddress
+    ip = ipaddress.ip_address(a)
+    return ip.ipv4_mapped or ip if ip.version == 6 else ip
+
+
 def egress_match(pattern, host, port, ips=()):
     """pattern: host, *.domain, IP or CIDR (e.g. 10.0.0.0/8), each optionally with :port (no port = any port).
     Names match the requested host; IPs and CIDRs match the host when it is an address, and every resolved address."""
@@ -300,7 +313,7 @@ def egress_match(pattern, host, port, ips=()):
         except ValueError:
             return False
         addrs = ([host] if is_ip(host) else []) + list(ips)
-        return any(ipaddress.ip_address(a) in net for a in addrs if is_ip(a))
+        return any(plain_ip(a) in net for a in addrs if is_ip(a))
     if p_host.startswith("*."):
         return host.endswith(p_host[1:])
     return host == p_host

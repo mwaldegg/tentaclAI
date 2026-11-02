@@ -261,8 +261,11 @@ async def network_learned(request: Request, op: str = Form("allow")):
     if op == "dismiss":
         await asyncio.to_thread(egress.learned_dismiss)
         return respond(request, "Learned destinations dismissed – they stay on the Seen list", refresh=True)
-    n = await asyncio.to_thread(egress.learned_allow)
-    return respond(request, f"{n} destination{'s' if n != 1 else ''} added to the allowlist", refresh=True)
+    n, skipped = await asyncio.to_thread(egress.learned_allow)
+    msg = f"{n} destination{'s' if n != 1 else ''} added to the allowlist"
+    if skipped:
+        return respond(request, msg + f" – not added: {'; '.join(skipped[:5])}" + (" …" if len(skipped) > 5 else ""), "warn", refresh=True)
+    return respond(request, msg, refresh=True)
 
 
 @router.get("/network", response_class=HTMLResponse)

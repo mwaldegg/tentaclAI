@@ -212,6 +212,7 @@ def _dir(name):
 def install(data, allow_unsigned=False, keys=None):
     """check and unpack a package – the version installed before is kept for rollback(). Returns the summary."""
     m, raw_manifest, raw_sig, signer, files = _read(data, PACKAGE_KEYS if keys is None else keys)
+    _managed(m["name"])
     if not signer and not allow_unsigned:
         raise PackageError("the package is not signed – confirm that you trust its code to install it")
     os.makedirs(PACKAGES_DIR, mode=0o700, exist_ok=True)
@@ -367,9 +368,19 @@ def _upload():
     return os.path.join(PACKAGES_DIR, ".upload.zip")  # PACKAGES_DIR read at call time (tests move it)
 
 
+def _managed(name):
+    """PackageError when the central server manages this module (its profile installs it) – unless it applies the profile"""
+    from .central import check_write
+    try:
+        check_write("modules", name)
+    except ValueError as e:
+        raise PackageError(str(e)) from None
+
+
 def remove(name):
     """delete an installed package (and its kept previous version)"""
     target = _dir(name)
+    _managed(name)
     if not os.path.isdir(target):
         raise PackageError(f"no package {name}")
     shutil.rmtree(target)
@@ -379,6 +390,7 @@ def remove(name):
 def rollback(name):
     """swap the installed package with the version kept from before the last update – returns the version now installed"""
     target, prev = _dir(name), os.path.join(PREV_DIR, name)
+    _managed(name)
     if not os.path.isdir(prev):
         raise PackageError(f"no earlier version of {name} kept")
     swap = tempfile.mkdtemp(prefix=".swap-", dir=PACKAGES_DIR)

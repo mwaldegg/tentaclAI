@@ -664,9 +664,13 @@ def _modules(prof, allowed, applied, drift):
                     data = _call("GET", f"/packages/{name}/{pkg['version']}", raw=True)
                     if pkg.get("sha256") and hashlib.sha256(data).hexdigest() != pkg["sha256"]:
                         raise CentralError("the package from the server doesn't match the profile's checksum")
-                    info = packages.install(data)  # signed by tentaclAI only (allow_unsigned is False)
+                    with applying():
+                        info = packages.install(data)  # signed by tentaclAI only (allow_unsigned is False)
                     out.append({"id": rid, "result": "applied", "msg": f"package {info['version']} installed – restart tentacontrol"})
             want = m.get("enabled")
+            kind = next((e["origin"] for e in extensions.available() if e["name"] == name), "")
+            if want and kind == "local" and name not in extensions.enabled():  # third-party code (local/extensions, unsigned package): on only by the admin here
+                raise ValueError(f"{name} is a local module – the server can switch it off, not on")
             if want is not None and extensions.origin(name) not in ("configured", "signed"):
                 on = name in extensions.enabled()
                 if on != bool(want) and (m.get("mode", "enforced") == "enforced" or rid not in applied):

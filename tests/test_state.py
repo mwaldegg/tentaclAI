@@ -346,3 +346,39 @@ def test_network_request_names_its_process(app_module, monkeypatch):
     (args, kw), = logged
     assert (kw["process"], kw["process_user"], kw["attempts"]) == (".venv/bin/python worker.py", "claude", 2)
     assert kw["origin"]["tmux"] == "claude-rc" and kw["requested"].startswith(time.strftime("%Y-"))
+
+
+def test_jsonstore_parallel_writes_and_locked_updates(app_module, tmp_path):
+    """each write has its own temporary file (a shared one once mixed two writes), locked() serialises read-modify-write"""
+    from concurrent.futures import ThreadPoolExecutor
+    from app import jsonstore
+    p = str(tmp_path / "state.json")
+    jsonstore.save(p, {"n": 0})
+
+    def bump(_):
+        with jsonstore.locked(p):
+            d = jsonstore.load(p)
+            jsonstore.save(p, {"n": d["n"] + 1, "pad": "x" * 20000})
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(bump, range(40)))
+    assert jsonstore.load(p)["n"] == 40
+    assert sorted(os.listdir(tmp_path)) == ["state.json", "state.json.lock"]  # no temporary files left
+    jsonstore.save(p, {}, mode=0o600)
+    assert os.stat(p).st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("changes,msg", [
+    ({"BAD KEY": "x"}, "not a variable name"),
+    ({"A=B": "x"}, "not a variable name"),
+    ({"\nX": "x"}, "not a variable name"),
+    ({"OK": "one\rTWO=2"}, "line breaks"),
+    ({"OK": "one\nTWO=2"}, "line breaks"),
+    ({"OK": "it's"}, "line breaks"),
+])
+def test_update_env_refuses_what_would_add_lines(app_module, tmp_path, changes, msg):
+    from app.envfile import read_env, update_env
+    p = tmp_path / ".env"
+    p.write_text("A=1\n")
+    with pytest.raises(ValueError, match=msg):
+        update_env(dict(changes, A="2"), path=str(p))
+    assert read_env(str(p)) == {"A": "1"}  # nothing written, not even the valid change

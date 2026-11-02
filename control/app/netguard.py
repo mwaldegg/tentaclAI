@@ -54,9 +54,18 @@ def _sandbox_nets():
     return nets
 
 
-def _in(ip, nets):
+def _plain(ip):
+    """one spelling per address – ::ffff:192.168.80.3 is 192.168.80.3; '' for no address"""
     try:
         a = ipaddress.ip_address(ip)
+    except ValueError:
+        return ""
+    return str(getattr(a, "ipv4_mapped", None) or a)
+
+
+def _in(ip, nets):
+    try:
+        a = ipaddress.ip_address(_plain(ip))
     except ValueError:
         return False
     return any(a in n for n in nets)
@@ -64,6 +73,7 @@ def _in(ip, nets):
 
 def source(ip):
     """'sandbox', 'egress' or 'other'"""
+    ip = _plain(ip or "") or ip
     if ip and ip in _resolve(CLAUDE_CONTAINER):
         return "sandbox"
     if ip and ip in _resolve(EGRESS_NAME):

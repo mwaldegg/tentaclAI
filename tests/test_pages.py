@@ -877,8 +877,22 @@ def test_network_learning_phase(client, monkeypatch, tmp_path):
     assert egress.mode() == "enforce" and sent == ["learned"]  # once
     html = client.get("/network").text
     assert "Learning phase over – 1 destination without a rule" in html and "odd.example.net:443" in html and "Allow all" in html
-    assert egress.learned_allow() == 1 and allowed == [("allow", "odd.example.net:443")]
+    assert egress.learned_allow() == (1, []) and allowed == [("allow", "odd.example.net:443")]
     assert egress.learned() == [] and "Learning phase over" not in client.get("/network").text
+
+
+def test_allow_all_learned_skips_what_the_list_cant_hold(client, monkeypatch, tmp_path):
+    """an IPv6 destination (or one the central server manages) was a 500 – now the others go on the list and it is named"""
+    from app import egress
+    monkeypatch.setattr(egress, "RULES", str(tmp_path / "egress-rules.json"))
+    monkeypatch.setattr(egress, "LEARN", str(tmp_path / "egress-learn.json"))
+    monkeypatch.setattr(egress, "learned", lambda: [{"host": "good.example.net", "port": "443"}, {"host": "2001:db8::1", "port": "443"}])
+    r = client.post("/network/learned", data={"op": "allow"})
+    assert r.status_code == 200
+    assert egress.rules()["allow"] == ["good.example.net:443"]
+    monkeypatch.setattr(egress, "learned", lambda: [])
+    html = client.get("/network").text  # the flash message
+    assert "1 destination added" in html and "2001:db8::1:443" in html
 
 
 def test_audit_rows_have_details(client, app_module, tmp_path, monkeypatch):

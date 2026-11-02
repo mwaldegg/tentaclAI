@@ -1,5 +1,6 @@
 """The admin account (username, email, name, bcrypt password hash in /data/users.json), optional second factor (TOTP),
 signed session cookie, login throttling."""
+import json
 import os
 import re
 import secrets
@@ -9,7 +10,7 @@ import bcrypt
 from fastapi import Request
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from . import jsonstore, totp
+from . import jsonstore, log, totp
 from .config import DATA_DIR
 
 USERS_FILE = os.path.join(DATA_DIR, "users.json")  # the accounts – Community has one, the admin
@@ -250,11 +251,29 @@ RECOVERY_ROUNDS = 10            # bcrypt cost of the recovery code hashes
 
 
 def _2fa():
-    return jsonstore.load(TWOFACTOR_FILE, {"enabled": False})
+    """the 2FA state – a file that exists but can't be read counts as on, with no secret: no code fits, so the
+    sign-in stays closed (not open without the second factor) until ./tentaclai.sh reset-2fa"""
+    try:
+        with open(TWOFACTOR_FILE) as f:
+            s = json.load(f)
+        if isinstance(s, dict):
+            return s
+    except FileNotFoundError:
+        return {"enabled": False}
+    except (OSError, ValueError):
+        pass
+    log.get("auth").error(f"{TWOFACTOR_FILE} is unreadable – sign-in needs a second factor that can't be checked; "
+                          "./tentaclai.sh reset-2fa switches 2FA off")
+    return {"enabled": True, "broken": True}
 
 
 def _2fa_save(s):
-    jsonstore.save(TWOFACTOR_FILE, s, mode=0o600)
+    jsonstore.save(TWOFACTOR_FILE, {k: v for k, v in s.items() if k != "broken"}, mode=0o600)
+
+
+def _2fa_lock():
+    """read-modify-write of twofactor.json one at a time: a TOTP step or recovery code can't be used twice at once"""
+    return jsonstore.locked(TWOFACTOR_FILE)
 
 
 def twofactor_enabled() -> bool:
@@ -274,9 +293,10 @@ def pending_secret():
 
 def start_setup():
     """a new secret waiting for its first code (the running setup is replaced)"""
-    s = _2fa()
-    s["pending_secret"] = totp.new_secret()
-    _2fa_save(s)
+    with _2fa_lock():
+        s = _2fa()
+        s["pending_secret"] = totp.new_secret()
+        _2fa_save(s)
     return s["pending_secret"]
 
 
@@ -286,48 +306,52 @@ def _hash(code):
 
 def confirm_setup(code):
     """turns 2FA on when the code matches the pending secret – returns the recovery codes (shown once) or None"""
-    s = _2fa()
-    secret = s.get("pending_secret")
-    counter = totp.verify(secret, code) if secret else None
-    if counter is None:
-        return None
-    codes = totp.new_recovery_codes()
-    s.update(enabled=True, secret=secret, last_counter=counter, recovery=[_hash(c) for c in codes], trusted={})
-    s.pop("pending_secret", None)
-    _2fa_save(s)
+    with _2fa_lock():
+        s = _2fa()
+        secret = s.get("pending_secret")
+        counter = totp.verify(secret, code) if secret else None
+        if counter is None:
+            return None
+        codes = totp.new_recovery_codes()
+        s.update(enabled=True, secret=secret, last_counter=counter, recovery=[_hash(c) for c in codes], trusted={})
+        s.pop("pending_secret", None)
+        _2fa_save(s)
     return codes
 
 
 def check_second_factor(code):
     """'totp', 'recovery' (that code is used up now) or None"""
-    s = _2fa()
-    if not s.get("enabled"):
-        return None
-    counter = totp.verify(s["secret"], code, s.get("last_counter", -1))
-    if counter is not None:
-        s["last_counter"] = counter
-        _2fa_save(s)
-        return "totp"
-    given = code.strip().lower()
-    for h in s.get("recovery", []):
-        if bcrypt.checkpw(given.encode(), h.encode()):
-            s["recovery"].remove(h)
+    with _2fa_lock():
+        s = _2fa()
+        if not s.get("enabled") or not s.get("secret"):
+            return None
+        counter = totp.verify(s["secret"], code, s.get("last_counter", -1))
+        if counter is not None:
+            s["last_counter"] = counter
             _2fa_save(s)
-            return "recovery"
+            return "totp"
+        given = code.strip().lower()
+        for h in s.get("recovery", []):
+            if bcrypt.checkpw(given.encode(), h.encode()):
+                s["recovery"].remove(h)
+                _2fa_save(s)
+                return "recovery"
     return None
 
 
 def new_recovery_codes():
-    s = _2fa()
-    codes = totp.new_recovery_codes()
-    s["recovery"] = [_hash(c) for c in codes]
-    _2fa_save(s)
+    with _2fa_lock():
+        s = _2fa()
+        codes = totp.new_recovery_codes()
+        s["recovery"] = [_hash(c) for c in codes]
+        _2fa_save(s)
     return codes
 
 
 def disable_twofactor():
     """off – secret, recovery codes and trusted browsers are gone (also: ./tentaclai.sh reset-2fa)"""
-    _2fa_save({"enabled": False})
+    with _2fa_lock():
+        _2fa_save({"enabled": False})
 
 
 def _signer():
@@ -336,10 +360,11 @@ def _signer():
 
 def trust_browser(label):
     """a signed cookie value; its id must also be in twofactor.json, so it can be revoked"""
-    s = _2fa()
     tid = secrets.token_urlsafe(12)
-    s.setdefault("trusted", {})[tid] = {"created": time.time(), "last_used": time.time(), "label": label[:80]}
-    _2fa_save(s)
+    with _2fa_lock():
+        s = _2fa()
+        s.setdefault("trusted", {})[tid] = {"created": time.time(), "last_used": time.time(), "label": label[:80]}
+        _2fa_save(s)
     return _signer().dumps(tid)
 
 
@@ -350,19 +375,21 @@ def is_trusted(token) -> bool:
         tid = _signer().loads(token, max_age=TRUST_DAYS * 86400)
     except BadSignature:  # includes expired
         return False
-    s = _2fa()
-    if tid not in s.get("trusted", {}):
-        return False
-    s["trusted"][tid]["last_used"] = time.time()
-    _2fa_save(s)
+    with _2fa_lock():
+        s = _2fa()
+        if tid not in s.get("trusted", {}):
+            return False
+        s["trusted"][tid]["last_used"] = time.time()
+        _2fa_save(s)
     return True
 
 
 def revoke_trust(tid=None):
     """one trusted browser, or all (tid None)"""
-    s = _2fa()
-    if tid is None:
-        s["trusted"] = {}
-    else:
-        s.get("trusted", {}).pop(tid, None)
-    _2fa_save(s)
+    with _2fa_lock():
+        s = _2fa()
+        if tid is None:
+            s["trusted"] = {}
+        else:
+            s.get("trusted", {}).pop(tid, None)
+        _2fa_save(s)

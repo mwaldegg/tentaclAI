@@ -146,3 +146,27 @@ def test_state_file_is_private(tf, app_module):
     import os
     from app import auth
     assert oct(os.stat(auth.TWOFACTOR_FILE).st_mode & 0o777) == "0o600"
+
+
+def test_broken_state_file_keeps_the_sign_in_closed(app_module, tf):
+    """a twofactor.json that can't be read must not switch the second factor off – no code fits until reset-2fa"""
+    from app import auth
+    with open(auth.TWOFACTOR_FILE, "w") as f:
+        f.write("{not json")
+    assert auth.twofactor_enabled()
+    assert auth.check_second_factor(next_code(tf["secret"])) is None
+    assert auth.check_second_factor(tf["codes"][0]) is None
+    with open(auth.TWOFACTOR_FILE, "w") as f:
+        f.write("[]")  # valid JSON, wrong shape
+    assert auth.twofactor_enabled() and auth.check_second_factor(next_code(tf["secret"])) is None
+    auth.disable_twofactor()  # ./tentaclai.sh reset-2fa
+    assert not auth.twofactor_enabled() and "broken" not in open(auth.TWOFACTOR_FILE).read()
+
+
+def test_a_code_counts_once_when_two_requests_race(app_module, tf):
+    from concurrent.futures import ThreadPoolExecutor
+    from app import auth
+    code = next_code(tf["secret"])
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(auth.check_second_factor, [code] * 8))
+    assert results.count("totp") == 1

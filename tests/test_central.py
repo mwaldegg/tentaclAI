@@ -294,6 +294,34 @@ def test_module_packages_from_the_profile(fc, ext, monkeypatch):
     report = central.sync()
     assert any(r["id"] == "modules:tcx_pkg" and r["result"] == "failed" and "not signed" in r["msg"] for r in report["results"])
     assert packages.installed_versions() == {"tcx_pkg": "1.0.0"}
+    # the package is managed: not removed, rolled back or replaced here
+    with pytest.raises(packages.PackageError, match="managed by"):
+        packages.remove("tcx_pkg")
+    with pytest.raises(packages.PackageError, match="managed by"):
+        packages.rollback("tcx_pkg")
+    with pytest.raises(packages.PackageError, match="managed by"):
+        packages.install(data)
+    assert packages.installed_versions() == {"tcx_pkg": "1.0.0"}
+
+
+def test_profile_never_switches_a_local_module_on(fc, ext):
+    """third-party code (local/extensions, unsigned packages) is switched on by the admin only – the server may switch it off"""
+    from app import central, extensions
+    ext.install("tcx_local", {"__init__.py": "def register(api):\n    pass\n"})
+    ext.install("tcx_builtin", {"__init__.py": "def register(api):\n    pass\n"}, origin="builtin")
+    central.enroll(fc.code(), "dev", ["modules"])
+    fc.set_profile(name="P", sections={}, modes={}, modules={"tcx_local": {"enabled": True}, "tcx_builtin": {"enabled": True}})
+    report = central.sync()
+    assert any(r["id"] == "modules:tcx_local" and r["result"] == "failed" and "local module" in r["msg"] for r in report["results"])
+    assert "tcx_local" not in extensions.enabled() and "tcx_builtin" in extensions.enabled()
+    central.leave()
+    extensions.set_enabled("tcx_local", True)  # the admin may
+    fc.tokens.add("tok-2")
+    central.enroll(fc.code("tok-2"), "dev", ["modules"])
+    fc.set_profile(name="P", sections={}, modes={}, modules={"tcx_local": {"enabled": False}})
+    central.sync()
+    assert "tcx_local" not in extensions.enabled()
+    central.leave()
 
 
 def test_shipped_entries_say_who_and_where(fc, client):

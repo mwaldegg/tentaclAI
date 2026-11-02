@@ -63,6 +63,20 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
     the scan), the output of `svc ssh`, `docker`, `compose`, `db` and `git` is scanned too (container logs, rows,
     command output), and the "send secrets" pattern no longer takes seconds on a long word (60,000 characters
     went past the hook's timeout, without a warning).
+- **Security – tentacontrol state and settings (from a code review):**
+  - Two-factor sign-in: a `twofactor.json` that can't be read switched the second factor off – the password alone
+    signed in. It now counts as on with no code that fits (log line names the file); `./tentaclai.sh reset-2fa` switches
+    it off. Two requests with the same code at once could both use it – TOTP and recovery codes are checked under a lock.
+  - State files: two writes of the same file at once shared one temporary file (`<file>.tmp`) and could leave a mix of
+    both; each write has its own now, and the network rules and the `.env` are changed under a lock.
+  - `.env`: tentacontrol refuses a variable name that isn't one and a carriage return in a value (it added a line of
+    its own). An inline comment after a value is read like compose reads it – `EGRESS_MODE=enforce # note` counted as
+    an unknown mode, which means permissive, for the gateway and svc.
+  - Network rules: an IP or CIDR rule also matches the same address written as IPv4-mapped IPv6 (`::ffff:10.0.0.1`).
+  - *Allow all* for learned destinations was a 500 when one of them couldn't go on the allowlist (an IPv6 address, an
+    entry the central server manages) – the others are added, the skipped ones are named.
+  - Central management: a module package the profile manages can no longer be removed, rolled back or replaced locally,
+    and a profile can switch a local module (third-party code: `local/extensions`, an unsigned package) off, not on.
 - Jobs: a proposal still to pick in an older run (e.g. a finding under *For tentaclAI*) was hidden in the folded
   history while the sidebar counted it – the history opens and shows "1 to pick", the group tab too.
 - Jobs: a run's details are shown folded under *Details* and rendered (tables, lists, bold, code, links) instead
@@ -143,6 +157,10 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   address counts as the client (login throttle, audit).
 - `JOB_READONLY_HELPERS` with `sort` or `uniq`: they are left out now (Settings → Jobs shows them as refused). Nothing
   else to do.
+- `.env` values with an inline comment (`KEY=value # note`) now mean `value` (as compose reads them). A value that
+  holds ` #` on purpose (a password with a space before `#`) must be quoted: `KEY='pass #word'`. Check with
+  `grep -nE '^[A-Za-z_][A-Za-z0-9_]*=.*[[:space:]]#' .env` (quoted values are fine).
+- Central management: a profile that switched a local module on reports it as *failed* now – switch it on in Modules.
 
 ## v0.23.0 – 2026-10-26
 

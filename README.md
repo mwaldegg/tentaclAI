@@ -247,7 +247,7 @@ One admin account – username, email and optional name, chosen at the first set
 Settings → Account. Optional **two-factor sign-in** (TOTP from an authenticator app, 10 one-time recovery
 codes, “trust this browser” for 30 days – revocable), signed session cookie (12 h, SameSite=Strict), login throttling.
 Reset: `./tentaclai.sh passwd` (shows the username, also revokes trusted browsers; `--username <name>` renames),
-`./tentaclai.sh reset-2fa`. tentacontrol itself is updated on the host: `docker compose up -d --build control`.
+`./tentaclai.sh reset-2fa` (also when the 2FA state file is unreadable – sign-in stays closed then, it never skips the code). tentacontrol itself is updated on the host: `docker compose up -d --build control`.
 
 ## Service reference
 

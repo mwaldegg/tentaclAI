@@ -52,6 +52,12 @@ def add(kind, entry):
         host, _, port = e.rpartition(":") if ":" in e else (e, "", "443")
         if any(tclib.egress_match(p, host.lstrip("*."), int(port or 443)) for p in default_list()):
             raise ValueError(f"{e} is on the built-in list (Claude Code itself) and can't be blocked")
+    with jsonstore.locked(RULES):
+        _add(kind, e)
+    return e
+
+
+def _add(kind, e):
     r = rules()
     other = "block" if kind == "allow" else "allow"
     host = e.rsplit(":", 1)[0] if ":" in e else e
@@ -59,14 +65,14 @@ def add(kind, entry):
     if e not in r[kind]:
         r[kind].append(e)
     _save(r)
-    return e
 
 
 def remove(kind, entry):
     check_write("network", f"{kind}:{entry}")
-    r = rules()
-    r[kind] = [x for x in r[kind] if x != entry]
-    _save(r)
+    with jsonstore.locked(RULES):
+        r = rules()
+        r[kind] = [x for x in r[kind] if x != entry]
+        _save(r)
 
 
 def still_blocked(entry):
@@ -155,12 +161,16 @@ def learned():
 
 
 def learned_allow():
-    """every learned destination onto the allowlist → how many"""
-    rows = learned()
+    """every learned destination onto the allowlist → (how many, the ones that couldn't go there – an address the
+    list can't hold, e.g. IPv6, or an entry the central server manages: with the reason)"""
+    rows, skipped = learned(), []
     for r in rows:
-        add("allow", f"{r['host']}:{r['port']}")
+        try:
+            add("allow", f"{r['host']}:{r['port']}")
+        except ValueError as e:
+            skipped.append(f"{r['host']}:{r['port']} ({e})")
     learned_dismiss()
-    return len(rows)
+    return len(rows) - len(skipped), skipped
 
 
 def learned_dismiss():

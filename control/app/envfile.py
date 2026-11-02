@@ -5,7 +5,10 @@ import tempfile
 
 import tclib
 
-from .config import ENV_FILE
+from . import jsonstore
+from .config import DATA_DIR, ENV_FILE
+
+KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 def read_env(path: str = ENV_FILE) -> dict:
     return tclib.read_env(path)
@@ -13,9 +16,11 @@ def read_env(path: str = ENV_FILE) -> dict:
 
 def _quote(v: str) -> str:
     # single quotes stop compose from interpolating $ in values (e.g. passwords)
+    if not isinstance(v, str):
+        raise ValueError("values must be text")
     if v == "" or re.fullmatch(r"[A-Za-z0-9_./:@+,=-]*", v):
         return v
-    if "'" in v or "\n" in v:
+    if "'" in v or any(c in v for c in "\r\n\0"):  # a line break would add a line of its own (another KEY=…)
         raise ValueError("values must not contain ' or line breaks")
     return "'" + v + "'"
 
@@ -23,8 +28,17 @@ def _quote(v: str) -> str:
 def update_env(changes: dict, path: str = ENV_FILE) -> None:
     """changes: key -> new value ('' = empty, None = remove the line). Existing lines are updated in place, new keys appended."""
     from .central import check_write  # settings the central server enforces are refused
-    for k in changes:
+    for k, v in changes.items():
+        if not isinstance(k, str) or not KEY_RE.fullmatch(k):
+            raise ValueError(f"not a variable name: {k!r}")
+        if v is not None:
+            _quote(v)  # refused before anything is written
         check_write("settings", k)
+    with jsonstore.locked(os.path.join(DATA_DIR, "env")):  # data/control/env.lock – not next to the .env
+        _update(changes, path)
+
+
+def _update(changes, path):
     try:
         with open(path) as f:
             lines = f.read().splitlines()

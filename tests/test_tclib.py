@@ -12,6 +12,13 @@ def test_read_env(tmp_path):
     assert tclib.read_env(str(tmp_path / "missing")) == {}
 
 
+def test_read_env_inline_comments(tmp_path):
+    """as compose reads them: ` #` after a value starts a comment, a # inside a word or in quotes is part of it"""
+    p = tmp_path / ".env"
+    p.write_text("MODE=enforce # was permissive\nPW=abc#def\nQ='a # b' # note\nD=\"x\"  # c\nT=\t# only a comment\n")
+    assert tclib.read_env(str(p)) == {"MODE": "enforce", "PW": "abc#def", "Q": "a # b", "D": "x", "T": ""}
+
+
 def test_variables_render_missing():
     obj = {"url": "https://${HOST}/api", "auth": {"token": "${TOKEN}"}, "_meta": {"x": "${IGNORED}"}, "list": ["${A}", 3]}
     assert tclib.variables(obj) == {"HOST", "TOKEN", "A"}
@@ -67,6 +74,9 @@ def test_reach_hosts():
     ("10.0.0.0/8", "name.test", 22, ("192.168.1.1",), False),
     ("192.168.1.5", "192.168.1.5", 443, (), True),
     ("bad/cidr", "x", 1, (), False),
+    ("10.0.0.0/8", "::ffff:10.1.2.3", 22, (), True),  # IPv4-mapped IPv6: the same address
+    ("10.0.0.0/8", "name.test", 22, ("::ffff:10.9.9.9",), True),
+    ("192.168.1.5", "::ffff:192.168.1.5", 443, (), True),
 ])
 def test_egress_match(pattern, host, port, ips, ok):
     assert tclib.egress_match(pattern, host, port, ips) is ok
