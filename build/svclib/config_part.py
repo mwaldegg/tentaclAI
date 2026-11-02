@@ -32,7 +32,7 @@ def cmd_config(services, args):
         target = os.path.join(core.SKILLS_DIR, name, "SKILL.md")
     else:
         name, src = args[2], args[3]
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", name):
+        if not tclib.valid_name(name):
             sys.exit(f"svc: {kind} names: a-z 0-9 _ - (max 41)")
         target = os.path.join(core.SERVICES_DIR if kind == "service" else core.SYSTEMS_DIR, f"{name}.json")
     section = {"service": "services", "system": "systems", "local": "instructions", "skill": "skills"}[kind]

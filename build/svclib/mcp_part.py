@@ -217,7 +217,7 @@ def mcp_stdio(m, tg):
     """a stdio server as the service's user with its env, svc in between: Claude's lines go to the server after the
     gate, the server's lines come back through it"""
     kw = core.runner(tg.name, {k: str(v) for k, v in (m.get("env") or {}).items()})
-    pw = core._account(core.run_user(tg.name)) if core.privileged() else None
+    pw = core.run_account(tg.name)
     kw["cwd"] = pw.pw_dir if pw else core.ORIG_CWD
     try:
         p = subprocess.Popen([m["command"], *[str(a) for a in m.get("args", [])]], stdin=subprocess.PIPE,

@@ -105,7 +105,7 @@ class _HTMLText(HTMLParser):
 
 def web_paths(name):
     """the service's cookie jar – in the home of its user, created and used by it (it runs curl)"""
-    pw = core._account(core.run_user(name)) if core.privileged() else None
+    pw = core.run_account(name)
     jar = os.path.join(pw.pw_dir if pw else os.path.expanduser("~"), ".cache", "tentaclai", "web", f"{name}.cookies")
     subprocess.run(["sh", "-c", 'umask 077; mkdir -p "$(dirname "$1")" && touch "$1"', "sh", jar], **core.runner(name))
     return jar

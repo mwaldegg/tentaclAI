@@ -290,9 +290,9 @@ def templates():
 
 # ---------------------------------------------------------------- @tentacle mentions
 
-MENTION_RE = re.compile(r"(?<![\w@.])@([a-z0-9][a-z0-9_-]{0,40})\b")
+MENTION_RE = re.compile(rf"(?<![\w@.])@({tclib.NAME.pattern})\b")
 # a tentacle in an svc call of the task: svc <name> …, svc mail|db|web|files|docker|compose|ssh|info|test <name>, svc git <cmd> <name>
-SVC_CALL_RE = re.compile(r"\bsvc\s+(?:(?:mail|db|web|files|docker|compose|ssh|info|test|git\s+[a-z]+)\s+)?([a-z0-9][a-z0-9_-]{0,40})(?![\w-])")
+SVC_CALL_RE = re.compile(rf"\bsvc\s+(?:(?:mail|db|web|files|docker|compose|ssh|info|test|git\s+[a-z]+)\s+)?({tclib.NAME.pattern})(?![\w-])")
 
 
 def tentacles():

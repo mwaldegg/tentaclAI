@@ -12,6 +12,7 @@ import time
 # ---------------------------------------------------------------- .env and ${VAR}
 
 VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,40}")  # services and systems (file name, svc <name>, run user, mentions)
 ENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")  # compose takes `export KEY=…` too
 
 
@@ -127,6 +128,10 @@ def missing(obj, env):
 PARTS = ("api", "mcp", "git", "docker", "db", "web", "files", "smtp", "imap")
 
 
+def valid_name(name):
+    return isinstance(name, str) and NAME.fullmatch(name) is not None
+
+
 def _load_dir(path, errors=None):
     """name -> parsed JSON of <path>/*.json (files starting with _ are templates/examples)"""
     items = {}
@@ -153,6 +158,13 @@ def load_systems(stack_dir, errors=None):
 def load_services(services_dir, systems=None, errors=None):
     """services by name; with systems given, docker (mode ssh) and files parts inherit the system's SSH host"""
     services = _load_dir(services_dir, errors)
+    for name in list(services):  # every svc call, run user and gate keys on the name: a broken one never loads
+        bad = (None if valid_name(name) else "invalid file name (a-z 0-9 _ -, max 41)") or (
+            None if services[name]["name"] == name else f"\"name\" {str(services[name]['name'])[:60]!r} differs from the file name")
+        if bad:
+            del services[name]
+            if errors is not None:
+                errors[name] = bad
     for svc in services.values():
         sysd = (systems or {}).get(svc.get("system", ""))
         if not sysd or not sysd.get("ssh_host"):

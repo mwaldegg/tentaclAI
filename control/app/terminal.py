@@ -1,12 +1,13 @@
 """Browser terminal: xterm.js <-> websocket <-> `docker exec -it` in the claude container."""
 import asyncio
 import json
-import re
 import socket
 import threading
 import uuid
 
 from fastapi import WebSocket, WebSocketDisconnect
+
+import tclib
 
 from .config import CLAUDE_CONTAINER
 from .dockerops import client
@@ -25,7 +26,7 @@ PROFILES = {
 
 def onboard_cmd(name):
     """Claude service onboarding (/onboard <name>) in its own persistent tmux session"""
-    if not re.match(r"^[a-z0-9][a-z0-9_-]{0,40}\Z", name or ""):
+    if not tclib.valid_name(name):
         raise ValueError("invalid service name")
     return ["tmux", "new-session", "-A", "-s", f"claude-onboard-{name}", "-c", "/workspace", "claude", f"/onboard {name}"]
 

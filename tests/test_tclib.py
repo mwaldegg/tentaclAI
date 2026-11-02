@@ -611,3 +611,17 @@ def test_env_export_and_validators_without_trailing_newline(tmp_path):
     with pytest.raises(ValueError, match="sudo"):
         tclib.ssh_validate({"alias": "web", "hostname": "h.example.com", "user": "root", "sudo": "sudo -n\n"})
     assert not tclib.ALIAS_RE.match("web\n") and tclib.ALIAS_RE.match("web")
+
+
+def test_load_services_skips_names_svc_cant_run(tmp_path):
+    """a file name outside the rule, or a "name" that differs from it: an error, not a service svc fails on later"""
+    d = tmp_path / "services"
+    d.mkdir()
+    (d / "ok.json").write_text('{"api": {"base_url": "https://x"}}')
+    (d / "Wiki.json").write_text('{"api": {"base_url": "https://x"}}')
+    (d / "mail.example.json").write_text("{}")
+    (d / "other.json").write_text('{"name": "My API"}')
+    errors = {}
+    assert list(tclib.load_services(str(d), errors=errors)) == ["ok"]
+    assert set(errors) == {"Wiki", "mail.example", "other"} and "differs" in errors["other"]
+    assert tclib.valid_name("a" * 41) and not tclib.valid_name("a" * 42) and not tclib.valid_name(None)

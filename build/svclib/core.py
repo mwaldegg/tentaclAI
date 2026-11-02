@@ -299,19 +299,33 @@ def _can_enter(pw, path):
 
 RUN_HOME = "/var/lib/tcrun"  # root's, 0711; one home per service below it (0700, that service's user)
 RUN_UIDS = (20000, 29999)
-SERVICE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,40}")
+
+
+_RUN = {}  # service -> its run user's passwd entry, resolved once per svc call
 
 
 def run_user(service):
     """the user that runs a service's client tools (curl, psql, mariadb, a stdio MCP server): one per service, so a
     tool of one service can't read another's secrets (/proc/<pid>/environ, its files in /dev/shm, cookie jars) –
     created on first use (tcr-<service>, uid from RUN_UIDS, home RUN_HOME/<service>)"""
-    if not SERVICE_NAME.fullmatch(service or ""):
+    pw = run_account(service)
+    return pw.pw_name if pw else _run_name(service)
+
+
+def _run_name(service):
+    if not tclib.valid_name(service):
         sys.exit(f"svc: invalid service name {service!r}")
     # up to 27 characters as is, longer ones always <19>-<8 hex> (28): a short name never equals a shortened one
-    user = "tcr-" + service if len(service) <= 27 else f"tcr-{service[:19]}-{hashlib.sha256(service.encode()).hexdigest()[:8]}"
+    return "tcr-" + service if len(service) <= 27 else f"tcr-{service[:19]}-{hashlib.sha256(service.encode()).hexdigest()[:8]}"
+
+
+def run_account(service):
+    """run_user's passwd entry (home = pw_dir), the user and its home created if missing; None when not root"""
+    user = _run_name(service)
     if not privileged():
-        return user
+        return None
+    if service in _RUN:
+        return _RUN[service]
     home = os.path.join(RUN_HOME, service)
     pw = _account(user)
     for _ in range(5):  # a parallel svc call may hold the passwd lock (all MCP servers start at once)
@@ -333,7 +347,8 @@ def run_user(service):
     st = os.lstat(home)  # chown also when a parallel call made it and hasn't chowned yet
     if (st.st_uid, st.st_gid) != (pw.pw_uid, pw.pw_gid):
         os.chown(home, pw.pw_uid, pw.pw_gid, follow_symlinks=False)
-    return user
+    _RUN[service] = pw
+    return pw
 
 
 def runner(service, env=None):
