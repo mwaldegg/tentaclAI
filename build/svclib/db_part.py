@@ -13,6 +13,28 @@ from . import core, gate, safeguards
 
 DB_RO_BYPASS = re.compile(r"read\s+write|default_transaction_read_only|transaction_read_only|tx_read_only|"
                           r"session\s+characteristics|\bset\s+role\b|\bset\s+session\s+authorization\b", re.I)
+# SQL that may run text as SQL, or quoting/comments postgres and mysql read differently: checked as written
+DB_RAW_CHECK = re.compile(r"\\|\$|--|#|/\*|\b(execute|exec|prepare|do|call|set_config|dblink\w*|query_to_xml\w*)\b", re.I)
+
+
+def ro_bypass(sql):
+    """True when SQL may switch a read-only session to read-write. Text in plain '…' literals and SHOW statements
+    (they only read a setting) don't count – but only where both engines split the text the same way"""
+    if DB_RAW_CHECK.search(sql):
+        return bool(DB_RO_BYPASS.search(sql))
+    out, i, n = [], 0, len(sql)
+    while i < n:
+        c = sql[i]
+        if c in "'\"`":  # '…' dropped, "…"/`…` (identifiers in postgres) kept
+            j = i + 1
+            while j < n and not (sql[j] == c and not (j + 1 < n and sql[j + 1] == c)):
+                j += 2 if sql[j] == c else 1
+            out.append("''" if c == "'" else sql[i:j + 1])
+            i = j + 1
+            continue
+        out.append(c)
+        i += 1
+    return any(DB_RO_BYPASS.search(st) for st in "".join(out).split(";") if not re.match(r"\s*show\b", st, re.I))
 
 
 def pg_sslmode(db):
@@ -29,9 +51,11 @@ def db_engine(db):
 def db_run(name, db, sql=None, fmt="table", interactive=False, ro=None):
     """run SQL (or an interactive client) – password only in env / a 0600 tmpfs file; ro (default: access read) makes
     the session read-only, so a write hidden in a read (SELECT … INTO, a function) fails there"""
-    ro = gate.access_mode(db) == "read" if ro is None else ro
-    if sql is not None and ro and DB_RO_BYPASS.search(sql):
-        sys.exit(f"svc: {name} is read-only – statements that change the transaction mode are not allowed")
+    mode = gate.access_mode(db)
+    ro = mode == "read" if ro is None else ro
+    if sql is not None and ro and ro_bypass(sql):
+        what = "is read-only" if mode == "read" else "runs reads in a read-only session"
+        sys.exit(f"svc: {name} {what} – statements that change the transaction mode are not allowed")
     if db_engine(db) == "postgres":
         addr, lport = core.tunnel(db.get("host", ""), db.get("port", 5432))
         env = dict(PGHOST=str(db.get("host", "")), PGHOSTADDR=addr, PGPORT=str(lport),

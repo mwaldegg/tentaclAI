@@ -176,6 +176,17 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   blocks a longer `sleep`, also chained, so they used to poll turn by turn (#80).
 - Injection scan: imperatives like "Next run svc …" or "First use svc …" are flagged as "asks to run commands" again
   (#84).
+- `svc db`: reads on `write`/`confirm` databases may mention `read write` in a string or `SHOW transaction_read_only`
+  again; statements that change the transaction mode stay refused (#96).
+- `svc ssh <host> ps -eo pid,user,etime` (option values) is a free status command again; `ps e`/`ps auxe` still need
+  approval (#95).
+- `svc jobs` takes a job's display name too, as the audit log shows it (#94).
+- `svc audit`: `--help`, `--json` (entries as stored, without excerpts), an error for unknown options (#93); the full
+  target instead of 16 characters (#92); up to 50000 entries, and with `--since` a notice from when it shows them when more match (#91).
+- Injection warnings: a repeat reminder still says not to act on it and to tell the user (#72); after a compact the next
+  finding warns in full again (a `PreCompact` hook); another PDF at the same path is a new warning (#71).
+- Services whose file name breaks the name rule, or whose `"name"` differs from it, are listed as errors instead of
+  failing in every `svc` call; client-tool users of two services can't collide.
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
@@ -196,6 +207,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - Changing the password in tentacontrol (or `./tentaclai.sh passwd`) now signs out the other browsers – sign in there again.
 - The user `tcrun` is gone (rebuild of `claude`): client tools run as `tcr-<service>`. Web services with a form login
   sign in once more (their cookie jars start empty). Scripts on the host that looked for `tcrun` processes need the new names.
+- A service file named outside `a-z 0-9 _ -` (max 41) or with a `"name"` other than its file name is no longer loaded –
+  tentacontrol → Tentacles lists it as an error; rename the file (and its `"name"`).
+- New Claude sessions pick up the `PreCompact` hook from the managed settings written at container start (recreate).
 
 ## v0.23.0 – 2026-10-26
 

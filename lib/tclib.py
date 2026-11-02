@@ -1005,10 +1005,12 @@ def tool_target(tool, tin):
 
 
 def guard_hook_settings(scan=True):
-    """the PostToolUse hook in Claude Code's managed settings: tc-guard logs every tool call in the audit log and
-    (scan) checks tool results for injection attempts"""
+    """the hooks in Claude Code's managed settings: tc-guard logs every tool call in the audit log and (scan) checks
+    tool results for injection attempts (PostToolUse); before a compact it forgets the session's warnings, so a repeat
+    after it gets the full warning again (PreCompact)"""
     return {"PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "timeout": 10,
-                                                        "command": "/usr/local/bin/tc-guard" + ("" if scan else " --no-scan")}]}]}
+                                                        "command": "/usr/local/bin/tc-guard" + ("" if scan else " --no-scan")}]}],
+            "PreCompact": [{"hooks": [{"type": "command", "timeout": 5, "command": "/usr/local/bin/tc-guard --forget"}]}]}
 
 
 def managed_settings(denied, guard=True):

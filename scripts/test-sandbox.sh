@@ -262,7 +262,7 @@ rpc() { printf '{"jsonrpc":"2.0","id":%s,"method":"%s","params":%s}\n' "$1" "$2"
 mcp testmcp list & wait_for 20 grep -q '"id":2' "$T/mcp-list.out" || true; touch "$T/mcp-list.done"; wait
 check "mcp: the server is offered all tools (confirm)" "$(grep -o '"name":"[a-z_]*"' "$T/mcp-list.out" | grep -c -e get_state -e turn_on -e wipe)" "3"
 { rpc 1 initialize; rpc 10 tools/call '{"name":"get_state","arguments":{"entity":"light.x"}}'; rpc 11 tools/call '{"name":"turn_on","arguments":{"entity":"light.x"}}'; } > "$T/mcp-call.in"
-mcp testmcp call & wait_for 20 grep -q '"id":10' "$T/mcp-call.out" || true
+mcp testmcp call & wait_for 20 grep -q '"id":10,.*"isError"' "$T/mcp-call.out" || true
 check "mcp: a reading tool runs without approval" "$(grep '"id":10' "$T/mcp-call.out" | grep -c 'did get_state' || true)" "1"
 wait_for 30 sh -c "curl -s -b '$J' http://$IP:8080/partials/approvals | grep -q 'turn_on'" || true
 check "mcp: a write waits for approval with tool and arguments" "$(curl -s -b "$J" "http://$IP:8080/partials/approvals" | grep -c 'turn_on {&#34;entity&#34;: &#34;light.x&#34;}' || true)" "1"

@@ -282,13 +282,25 @@ def guarded(service, part, mode, action, run, interactive=False, review=None):
     return rc
 
 
+AUDIT_MAX = 50000
+AUDIT_USAGE = ("usage: svc audit [n] [--since 24h|7d|30d] [--json] [search …]\n"
+               "  n        newest entries to show (default 20, max 50000)\n"
+               "  --json   the entries as stored (without excerpts), one JSON object per line\n"
+               "  search   as on Logs → Audit: words, field:value, -field:value")
+
+
 def cmd_audit(args):
-    """svc audit [n] [--since 24h|7d|30d] [search …] – search as on Logs → Audit: words, field:value, -field:value"""
-    n, since, terms = 20, 0, []
+    """svc audit [n] [--since 24h|7d|30d] [--json] [search …] – search as on Logs → Audit: words, field:value, -field:value"""
+    n, since, terms, as_json = 20, 0, [], False
     it = iter(args)
     for a in it:
         if a.isdigit():
-            n = min(int(a), 5000)
+            n = int(a)
+        elif a in ("-h", "--help"):
+            print(AUDIT_USAGE)
+            return 0
+        elif a == "--json":
+            as_json = True
         elif a == "--since":
             v = next(it, "")
             m = re.fullmatch(r"(\d+)([hd])", v)
@@ -297,17 +309,39 @@ def cmd_audit(args):
             since = time.time() - int(m.group(1)) * (3600 if m.group(2) == "h" else 86400)
         elif a in ("--category", "--service", "--decision", "--actor"):  # older options → the same terms
             terms.append(f"{a[2:]}:{next(it, '')}")
+        elif a.startswith("--"):  # -field:value is a search term, --anything an option
+            sys.exit(f"svc audit: unknown option {a}\n{AUDIT_USAGE}")
         else:
             terms.append(a)
+    if n > AUDIT_MAX:
+        print(f"svc audit: at most {AUDIT_MAX} entries – showing {AUDIT_MAX}", file=sys.stderr)
+        n = AUDIT_MAX
     query = " ".join(terms)
     unknown = tclib.audit_unknown_keys(query)
     if unknown:
         print(f"svc audit: no field {', '.join(unknown)} – searched as text. Fields: {' '.join(tclib.AUDIT_SEARCH_KEYS)}",
               file=sys.stderr)
-    entries, _ = tclib.audit_read(AUDIT_DIR, limit=n, since=since, query=query)
+    entries, more = tclib.audit_read(AUDIT_DIR, limit=n, since=since, query=query)
     if not entries:
-        print("No matching audit entries.")
+        if not as_json:
+            print("No matching audit entries.")
         return 0
+    for e in reversed(entries):
+        if as_json:
+            # excerpts are the flagged text itself (a possible prompt injection) – Logs → Audit shows them, svc doesn't
+            print(json.dumps({k: v for k, v in e.items() if not k.startswith("_") and k != "excerpts"}, ensure_ascii=False))
+            continue
+        v = e.get("_view") or tclib.audit_view(e)
+        extra = f" exit {e['exit']}" if "exit" in e else f" ×{e['count']}" if "count" in e else ""
+        print(f"{e['ts'][:19]}  {v['actor']:<6} {v['type']:<7} {v['outcome']:<8} {v['target']:<16} {v['action'][:90]}{extra}")
+        if e.get("error"):
+            print(f"{'':<21}↳ {e['error'].replace(chr(10), ' · ')[:160]}")
+        if e.get("reason"):
+            print(f"{'':<21}↳ reason: {e['reason'][:160]}")
+    if more and since:  # the window would look complete; on stderr: a pipe (| head, | grep) still gets only entries
+        print(f"svc audit: only the newest {len(entries)} matching entries, from {entries[-1]['ts'][:19]} – older ones "
+              "in the window are left out; raise n or narrow the search", file=sys.stderr)
+    return 0
     for e in reversed(entries):
         v = e.get("_view") or tclib.audit_view(e)
         extra = f" exit {e['exit']}" if "exit" in e else f" ×{e['count']}" if "count" in e else ""

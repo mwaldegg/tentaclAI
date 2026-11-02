@@ -40,6 +40,18 @@ def _run_line(r):
     return " · ".join(b for b in bits if b) + "  " + (res.get("title") or r.get("error") or "")
 
 
+def _job_id(jobs, ref):
+    """the job id for an id or a display name (the audit log and job output show the name)"""
+    if ref in jobs:
+        return ref
+    named = sorted(k for k, j in jobs.items() if str(j.get("name") or "").strip().lower() == ref.strip().lower())
+    if len(named) == 1:
+        return named[0]
+    if named:
+        sys.exit(f"svc: several jobs are named '{ref}' – use the id: {', '.join(named)}")
+    sys.exit(f"svc: unknown job '{ref}' – svc jobs lists the ids")
+
+
 def cmd_jobs(args):
     usage = "usage: svc jobs [--group <group>] | svc jobs <name> [--runs N] [--steps]"
     jobs, hist = _jobs_file("jobs.json", {}), _jobs_file("job-history.json", [])
@@ -73,7 +85,8 @@ def cmd_jobs(args):
         else:
             sys.exit(usage)
         i += 1
-    j = jobs.get(jid) or sys.exit(f"svc: unknown job '{jid}' (svc jobs)")
+    jid = _job_id(jobs, jid)
+    j = jobs[jid]
     print(f"# {jid} – {j.get('name')}")
     print(f"{'group ' + j['group'] + ' · ' if j.get('group') else ''}{tclib.schedule_text(j.get('schedule'))} · {j.get('profile', 'read-only')}"
           f"{' · only the tentacles named in the task' if j.get('scope') else ''} · notify {j.get('notify', 'findings')}"

@@ -66,10 +66,37 @@ def ssh_read_only(alias, cmd):
         return not args or args[0] in ("a", "addr", "address", "r", "route", "l", "link", "n", "neigh") and \
             not any(a in ("add", "del", "delete", "set", "change", "replace", "flush", "append", "restore") for a in args[1:])
     if head == "ps":  # BSD-style e (ps e, ps auxe) prints every process's environment – tokens included
-        return not any("e" in a for a in args)
+        return not ps_environ(rest)
     if head == "ss":
         return not any(a in ("-K", "--kill") or (a.startswith("-") and not a.startswith("--") and "K" in a) for a in rest)
     return True
+
+
+# options with a value, attached (-opid, axopid) or as the next word (-o pid): UNIX style after a dash, BSD style without
+PS_VALUE = {True: set("CGgOopqstUu"), False: set("OopqtUk")}
+PS_LONG_VALUE = ("--format", "--sort", "--pid", "--ppid", "--quick-pid", "--sid", "--tty", "--user", "--User",
+                 "--group", "--Group", "--cols", "--columns", "--width", "--rows", "--lines")
+
+
+def ps_environ(rest):
+    """True when the ps options include BSD-style e (the environment) – option values (-o pid,user,etime) don't count"""
+    skip = False
+    for a in rest:
+        if skip:
+            skip = False
+            continue
+        if a.startswith("--"):
+            skip = a in PS_LONG_VALUE
+            continue
+        unix = a.startswith("-")
+        letters = a[1:] if unix else a
+        for i, c in enumerate(letters):
+            if c in PS_VALUE[unix]:
+                skip = i == len(letters) - 1
+                break
+            if c == "e" and not unix:
+                return True
+    return False
 
 
 def cmd_ssh(name_args):

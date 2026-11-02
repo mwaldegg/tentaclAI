@@ -316,6 +316,7 @@ def test_guard_switch_and_managed_settings():
     assert hook["matcher"] == "*" and hook["hooks"][0]["command"].endswith("tc-guard")  # every tool call is audited
     off = tclib.managed_settings([], False)["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
     assert off.endswith("tc-guard --no-scan")  # guard off: still logged, no longer scanned
+    assert on["hooks"]["PreCompact"][0]["hooks"][0]["command"].endswith("tc-guard --forget")  # warnings in full after it
 
 
 def test_approval_handoff():
