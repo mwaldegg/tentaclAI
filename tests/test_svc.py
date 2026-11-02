@@ -44,6 +44,12 @@ class _Svc:
 svc = _Svc()
 
 
+@pytest.fixture(autouse=True)
+def _unprivileged(monkeypatch):
+    """pytest may run as root on the host: never useradd/chown there (tests that need root patch it back to True)"""
+    monkeypatch.setattr(svc, "privileged", lambda: False)
+
+
 def test_svc_proxy_survives_monkeypatch_undo():
     """undo restores the module's value instead of deleting it (pytest >= 9.2 reads the old value from __dict__)"""
     mp = pytest.MonkeyPatch()
@@ -1167,5 +1173,7 @@ def test_one_run_user_per_service():
     long = "a" * 41
     u = svc.run_user(long)
     assert len(u) <= 32 and u == svc.run_user(long) and u != svc.run_user("a" * 40)
+    short = long[:19] + "-" + u[-8:]  # a 28-character name that looks like the shortened one
+    assert svc.run_user(short) != u and len(svc.run_user("b" * 27)) == 31
     with pytest.raises(SystemExit):
         svc.run_user("../etc")

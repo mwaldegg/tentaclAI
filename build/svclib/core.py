@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 import tclib  # shared with tentacontrol (lib/tclib.py)
 
@@ -307,24 +308,31 @@ def run_user(service):
     created on first use (tcr-<service>, uid from RUN_UIDS, home RUN_HOME/<service>)"""
     if not SERVICE_NAME.fullmatch(service or ""):
         sys.exit(f"svc: invalid service name {service!r}")
-    user = "tcr-" + service if len(service) <= 28 else f"tcr-{service[:19]}-{hashlib.sha256(service.encode()).hexdigest()[:8]}"
+    # up to 27 characters as is, longer ones always <19>-<8 hex> (28): a short name never equals a shortened one
+    user = "tcr-" + service if len(service) <= 27 else f"tcr-{service[:19]}-{hashlib.sha256(service.encode()).hexdigest()[:8]}"
     if not privileged():
         return user
     home = os.path.join(RUN_HOME, service)
     pw = _account(user)
-    if pw is None:
+    for _ in range(5):  # a parallel svc call may hold the passwd lock (all MCP servers start at once)
+        if pw is not None:
+            break
         r = subprocess.run(["useradd", "-M", "-U", "-d", home, "-s", "/usr/sbin/nologin", "-K", f"UID_MIN={RUN_UIDS[0]}",
                             "-K", f"UID_MAX={RUN_UIDS[1]}", "-K", f"GID_MIN={RUN_UIDS[0]}", "-K", f"GID_MAX={RUN_UIDS[1]}", user],
                            capture_output=True, text=True)
         pw = _account(user)  # also when a second svc call created it at the same moment
         if pw is None:
-            sys.exit(f"svc: can't create the user for {service}: {r.stderr.strip()[-200:]}")
+            time.sleep(0.2)
+    if pw is None:
+        sys.exit(f"svc: can't create the user for {service}: {r.stderr.strip()[-200:]}")
     os.makedirs(RUN_HOME, mode=0o711, exist_ok=True)
     try:
         os.mkdir(home, 0o700)
-        os.chown(home, pw.pw_uid, pw.pw_gid)
     except FileExistsError:
         pass
+    st = os.lstat(home)  # chown also when a parallel call made it and hasn't chowned yet
+    if (st.st_uid, st.st_gid) != (pw.pw_uid, pw.pw_gid):
+        os.chown(home, pw.pw_uid, pw.pw_gid, follow_symlinks=False)
     return user
 
 
