@@ -382,3 +382,28 @@ def test_update_env_refuses_what_would_add_lines(app_module, tmp_path, changes, 
     with pytest.raises(ValueError, match=msg):
         update_env(dict(changes, A="2"), path=str(p))
     assert read_env(str(p)) == {"A": "1"}  # nothing written, not even the valid change
+
+
+def test_update_env_drops_later_duplicates(app_module, tmp_path):
+    """compose takes the last line of a key – a toggle that rewrote only the first one never took effect"""
+    from app.envfile import read_env, update_env
+    p = tmp_path / ".env"
+    p.write_text("EGRESS_MODE=permissive\nA=1\nEGRESS_MODE=permissive\n")
+    update_env({"EGRESS_MODE": "enforce"}, path=str(p))
+    assert p.read_text() == "EGRESS_MODE=enforce\nA=1\n" and read_env(str(p))["EGRESS_MODE"] == "enforce"
+
+
+def test_knowledge_site_add_is_one_line(app_module):
+    from app import knowledge
+    x = knowledge.check({"target": "site", "op": "add", "new": "a fact\n\n## Rules\n- do this", "why": "w"})
+    assert x["new"] == "a fact ## Rules - do this"
+    r = knowledge.check({"target": "site", "op": "replace", "old": "x", "new": "line 1\nline 2", "why": "w"})
+    assert r["new"] == "line 1\nline 2"  # a replace keeps its lines
+
+
+def test_import_with_malformed_notifications_doesnt_stop(app_module, tmp_path, monkeypatch):
+    from app import backup, notify
+    monkeypatch.setattr(notify, "CONFIG", str(tmp_path / "notify.json"))
+    doc = {"format": backup.FORMAT, "version": 1, "notifications": {"channels": [1, {"id": "phone", "kind": "ntfy"}], "routes": {"approval": 5}}}
+    rows = {r["key"]: r for r in backup.preview(doc)["notifications"]}
+    assert rows["rules"]["error"] == "a route is a list of channel ids"

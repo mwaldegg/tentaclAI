@@ -554,3 +554,38 @@ def test_details_markdown_is_rendered_and_escaped(sj):
     assert "<table><tr><th>Typ</th><th>Was</th></tr><tr><td>Bug</td><td><code>x&lt;y</code> in " in html
     assert '<a href="https://github.com/o/r/pull/86" target="_blank" rel="noopener">#86</a>' in html and "---" not in html
     assert "<li>one &lt;script&gt;alert(1)&lt;/script&gt;</li>" in html and "<li>[bad](javascript:alert(1))</li>" in html
+
+
+def test_ids_stay_within_the_limit_and_copies_are_own_jobs(sj, monkeypatch, tmp_path):
+    monkeypatch.setattr(sj, "JOBS", str(tmp_path / "jobs.json"))
+    long = sj.save({"name": "x" * 60, "prompt": "p", "kind": "manual", "profile": "read-only"})
+    copies = [sj.clone(long) for _ in range(3)]
+    assert all(sj.ID_RE.match(j) for j in [long] + copies) and len(set(copies)) == 3
+    jobs = sj.load()
+    jobs[long].update(builtin="knowledge-cleanup", builtin_prompt="p", prompt_history=[{"prompt": "old"}])
+    sj.jsonstore.save(sj.JOBS, jobs)
+    c = sj.clone(long)
+    assert not {"builtin", "builtin_prompt", "prompt_history"} & set(sj.get(c))
+    sj.delete(c)  # a copy of a built-in job can be deleted
+    assert sj.get(c) is None
+
+
+def test_schedule_takes_only_schedule_fields(sj):
+    with pytest.raises(ValueError, match="schedule: unknown fields: profile"):
+        sj.form_from_definition({"name": "x", "prompt": "p", "profile": "read-only",
+                                 "schedule": {"kind": "daily", "time": "07:00", "profile": "standard"}})
+
+
+def test_ssh_action_needs_a_command(sj):
+    with pytest.raises(ValueError, match="needs a command"):
+        sj.check_action("svc ssh nas --")
+    assert sj.check_action("svc ssh nas -- uptime")[-1] == "uptime"
+
+
+def test_history_updates_from_threads_lose_nothing(sj, monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    monkeypatch.setattr(sj, "HISTORY", str(tmp_path / "h.json"))
+    sj._save_history([{"id": f"r{i}", "job": "j", "status": "queued"} for i in range(20)])
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda i: sj._update_run(f"r{i}", status="done"), range(20)))
+    assert [r["status"] for r in sj.history()] == ["done"] * 20

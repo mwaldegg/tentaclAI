@@ -154,6 +154,9 @@ async def approval_decide(request: Request, rid: str, verdict: str):
         return PlainTextResponse("", status_code=400)
     who = auth.username(request) or "tentacontrol"
     a = activity.APPROVALS.get(rid) or {}
+    network = ("net10", "net60", "always", "block")  # the network card's buttons; approve15 only for the others
+    if a and verdict not in ("approve", "deny") and (verdict in network) != (a.get("part") == "network"):
+        return PlainTextResponse("", status_code=400)
     if verdict in ("always", "block") and a.get("part") == "network" and a.get("status") == "pending":
         egress.add("allow" if verdict == "always" else "block", a["service"])  # host:port
     reason = (await request.form()).get("reason", "") if verdict == "deny" else ""

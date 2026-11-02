@@ -127,3 +127,19 @@ def test_security_moved_to_account(client):
     assert r.status_code == 301 and r.headers["location"] == "/account"
     html = client.get("/account").text
     assert "<h1>Account</h1>" in html and 'href="/account" class="active"' in html
+
+
+def test_password_change_signs_other_browsers_out(fresh, app_module):
+    """a cookie that leaked stays valid no longer than the password it came with – the browser that changed it stays in"""
+    auth = fresh
+    auth.create_admin("mwa", "m@example.org", "", "testpass123")
+    a, b = _client(app_module), _client(app_module)
+    for c in (a, b):
+        c.post("/login", data={"username": "mwa", "password": "testpass123"})
+        assert c.get("/settings", follow_redirects=False).status_code == 200
+    assert a.post("/account/password", data={"current": "testpass123", "password": "newpass1234",
+                                              "password2": "newpass1234"}).status_code == 200
+    assert a.get("/settings", follow_redirects=False).status_code == 200
+    assert b.get("/settings", follow_redirects=False).status_code in (302, 303, 307)
+    auth.set_password("other12345")  # ./tentaclai.sh passwd on the host: every browser
+    assert a.get("/settings", follow_redirects=False).status_code in (302, 303, 307)

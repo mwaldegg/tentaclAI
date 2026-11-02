@@ -361,7 +361,7 @@ def enroll(code, name, allowed, ca_pem=""):
         raise CentralError("this installation is enrolled already – leave first")
     c = parse_code(code)
     allowed = sorted(a for a in allowed if a in areas())
-    ca_pem = (ca_pem or "").strip() or c.get("ca", "").strip()  # pasted here before the one the server put into the code
+    ca_pem = (ca_pem or "").strip() or str(c.get("ca") or "").strip()  # pasted here before the one the server put into the code
     if ca_pem:
         if "BEGIN CERTIFICATE" not in ca_pem:
             raise CentralError("the CA certificate is not PEM")
@@ -379,6 +379,8 @@ def enroll(code, name, allowed, ca_pem=""):
     key = answer.get("central_key") or ""
     if not key or fingerprint(key) != c["key"]:
         raise CentralError("the server's key doesn't match the enrollment code – not enrolled")
+    if not isinstance(answer.get("agent_id"), str) or not answer["agent_id"]:
+        raise CentralError("the server's answer has no agent id – not enrolled")
     now = time.time()
     st = {"url": c["url"], "agent_id": answer["agent_id"], "central_key": key, "central_name": answer.get("central_name") or c["url"],
           "name": name, "areas": allowed, "enrolled": now, "profile_rev": 0, "applied": {},
@@ -664,6 +666,9 @@ def _modules(prof, allowed, applied, drift):
                     data = _call("GET", f"/packages/{name}/{pkg['version']}", raw=True)
                     if pkg.get("sha256") and hashlib.sha256(data).hexdigest() != pkg["sha256"]:
                         raise CentralError("the package from the server doesn't match the profile's checksum")
+                    got = packages.inspect(data)  # another package or version would be installed again every sync
+                    if (got["name"], got["version"]) != (name, pkg.get("version")):
+                        raise CentralError(f"the server sent {got['name']} {got['version']}, the profile names {name} {pkg.get('version')}")
                     with applying():
                         info = packages.install(data)  # signed by tentaclAI only (allow_unsigned is False)
                     out.append({"id": rid, "result": "applied", "msg": f"package {info['version']} installed – restart tentacontrol"})

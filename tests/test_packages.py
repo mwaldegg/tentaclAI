@@ -335,3 +335,11 @@ def test_tcpkg_builds_what_tentacontrol_installs(pk, tmp_path):
     (src / "lib.so").write_bytes(b"")
     with pytest.raises(SystemExit, match="file type not allowed"):
         tcpkg.build(str(src), str(tmp_path))
+
+
+def test_a_file_and_a_folder_of_the_same_name(pk):
+    """x/a.py and x/a.py/b.py passed every check, unpacking then raised an OSError (a 500, a central sync that died)"""
+    packages, priv = pk
+    files = dict(files_of(), **{"tcx_pkg/templates/page.html/inner.html": b"x"})
+    with pytest.raises(packages.PackageError, match="a file and a folder of the same name"):
+        packages.install(build(files=files, priv=priv))

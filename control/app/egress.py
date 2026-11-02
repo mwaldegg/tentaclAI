@@ -19,7 +19,7 @@ LEARN = os.path.join(DATA_DIR, "egress-learn.json")  # {started, ended, dismisse
 CLEARED = os.path.join(DATA_DIR, "egress-cleared")  # time of the last "Clear" – the gateway empties its list after it
 SEEN = "/egress/egress-seen.json"
 DEFAULT_FILE = "/app/egress-default.txt"
-ENTRY_RE = re.compile(r"^((\*\.)?[a-z0-9.-]{1,253}|\d{1,3}(\.\d{1,3}){3}/\d{1,2})(:\d{1,5})?$")
+ENTRY_RE = re.compile(r"^((\*\.)?[a-z0-9.-]{1,253}|\d{1,3}(\.\d{1,3}){3}/\d{1,2})(:\d{1,5})?\Z")
 
 
 def default_list():

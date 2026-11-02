@@ -36,9 +36,9 @@ MAX_UNPACKED = 50 * 1024 * 1024
 MAX_FILES = 2000
 SUFFIXES = {".py", ".html", ".css", ".js", ".json", ".svg", ".png", ".woff2", ".md", ".txt"}
 PLAIN_NAMES = {"LICENSE", "NOTICE"}
-NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")  # = extensions.NAME_RE
-VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,39}$")
-SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}\Z")  # = extensions.NAME_RE
+VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,39}\Z")
+SHA_RE = re.compile(r"^[0-9a-f]{64}\Z")
 
 
 class PackageError(ValueError):
@@ -161,6 +161,10 @@ def _read(data, keys):
         raise PackageError(f"{extra[0]}: in the ZIP, but not in tcpkg.json")
     if missing:
         raise PackageError(f"{missing[0]}: in tcpkg.json, but not in the ZIP")
+    dirs = {"/".join(p.split("/")[:i]) for p in listed for i in range(1, p.count("/") + 1)}
+    clash = sorted(listed & dirs)
+    if clash:
+        raise PackageError(f"{clash[0]}: a file and a folder of the same name")
     files = {}
     for path, info in raw.items():
         b = content(info)
@@ -235,8 +239,10 @@ def install(data, allow_unsigned=False, keys=None):
             shutil.rmtree(prev, ignore_errors=True)
             os.rename(target, prev)
         os.rename(tmp, target)
-    except BaseException:
+    except BaseException as e:
         shutil.rmtree(tmp, ignore_errors=True)
+        if isinstance(e, OSError):
+            raise PackageError(f"can't unpack the package: {e}") from None
         raise
     return _summary(m, signer)
 

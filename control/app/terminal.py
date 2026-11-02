@@ -25,7 +25,7 @@ PROFILES = {
 
 def onboard_cmd(name):
     """Claude service onboarding (/onboard <name>) in its own persistent tmux session"""
-    if not re.match(r"^[a-z0-9][a-z0-9_-]{0,40}$", name or ""):
+    if not re.match(r"^[a-z0-9][a-z0-9_-]{0,40}\Z", name or ""):
         raise ValueError("invalid service name")
     return ["tmux", "new-session", "-A", "-s", f"claude-onboard-{name}", "-c", "/workspace", "claude", f"/onboard {name}"]
 

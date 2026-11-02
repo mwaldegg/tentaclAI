@@ -33,7 +33,7 @@ from .log import get
 log = get("extensions")
 
 API_VERSION = 1
-NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
+NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}\Z")
 BUILTIN_DIR = os.environ.get("TC_BUILTIN_EXTENSIONS", "/app/extensions")
 LOCAL_DIR = os.path.join(STACK_DIR, "local", "extensions")
 STATE = os.path.join(DATA_DIR, "extensions.json")
@@ -241,7 +241,7 @@ class Api:
 
     def add_icon(self, name, svg):
         """an icon for icon(name): the inner SVG of a 24×24 stroke icon (paths, circles …)"""
-        if not re.match(r"^[a-z][a-z0-9-]{1,30}$", name or ""):
+        if not re.match(r"^[a-z][a-z0-9-]{1,30}\Z", name or ""):
             raise ExtensionError(f"icon name {name!r}: lowercase letters, digits and -")
         if name in _builtin_icons() or name in _icons:
             raise ExtensionError(f"icon {name} exists already")
@@ -276,7 +276,7 @@ class Api:
 
     def add_help_section(self, id, title, template):
         """a section at the end of Help – template: one of the extension's templates (rendered without page context)"""
-        if not re.match(r"^[a-z][a-z0-9-]{1,40}$", id or ""):
+        if not re.match(r"^[a-z][a-z0-9-]{1,40}\Z", id or ""):
             raise ExtensionError(f"help section id {id!r}: lowercase letters, digits and -")
         h = {"id": f"x-{self.name}-{id}" if self.origin not in TRUSTED else id, "title": title, "template": template,
              "ext": self.name}
@@ -306,7 +306,7 @@ class Api:
         from . import notify
         if id in notify.EVENTS:
             raise ExtensionError(f"event {id} exists already")
-        if not re.match(r"^[a-z][a-z0-9_]{1,30}$", id or "") or priority not in ("low", "normal", "high"):
+        if not re.match(r"^[a-z][a-z0-9_]{1,30}\Z", id or "") or priority not in ("low", "normal", "high"):
             raise ExtensionError("event: id lowercase letters, digits and _; priority low, normal or high")
         notify.EVENTS[id] = (label, priority, description)
         self._done.append(lambda: notify.EVENTS.pop(id, None))
@@ -320,7 +320,7 @@ class Api:
     def add_backup_part(self, key, label, export, apply):
         """a part of Settings → Export / Import: export() → JSON-able data, apply(data) writes it back"""
         sid = f"x_{self.name}_{key}"
-        if not re.match(r"^[a-z][a-z0-9_]{0,30}$", key or "") or sid in _backup_parts:
+        if not re.match(r"^[a-z][a-z0-9_]{0,30}\Z", key or "") or sid in _backup_parts:
             raise ExtensionError(f"backup part {key!r}: lowercase letters, digits and _, once")
         _backup_parts[sid] = {"label": label, "export": export, "apply": apply, "ext": self.name}
         self._done.append(lambda: _backup_parts.pop(sid, None))

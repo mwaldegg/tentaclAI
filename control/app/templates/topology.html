@@ -43,7 +43,9 @@
             panel: v("--panel", "#161a22"), bg: v("--bg-2", "#11141b"), accent: v("--accent", "#8b6cf6"), ok: v("--ok", "#3ecf8e"),
             warn: v("--warn", "#f5a524"), err: v("--err", "#f06272"), info: v("--info", "#5aa9ff") };
   var stateColor = { ok: C.ok, warn: C.warn, err: C.err, off: C.muted, error: C.err };
-  var esc = function (s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; };
+  var esc = function (s) {  // text and attribute values alike (quotes too)
+    return (s == null ? "" : String(s)).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  };
   var $ = function (id) { return document.getElementById(id); };
   // the octopus in the central tentaclAI node (own vector drawing, like the logo): coral octopus, white birdcage
   var octopus = "data:image/svg+xml;utf8," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 -4 48 52'>" +

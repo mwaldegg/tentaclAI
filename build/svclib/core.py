@@ -67,9 +67,9 @@ def via_sudo():
     return privileged() and "SUDO_UID" in os.environ
 
 
-SESSION_ID_RE = re.compile(r"^(cse_[A-Za-z0-9]{10,60}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
+SESSION_ID_RE = re.compile(r"^(cse_[A-Za-z0-9]{10,60}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 _origin = None
-JOB_RE = re.compile(r"^[a-z0-9]{6,40}$")
+JOB_RE = re.compile(r"^[a-z0-9]{6,40}\Z")
 _job = None
 
 

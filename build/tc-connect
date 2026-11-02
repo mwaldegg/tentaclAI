@@ -15,7 +15,8 @@ except OSError:
 if proxy:
     ph, _, pp = proxy.split("//", 1)[-1].rstrip("/").partition(":")
     s = socket.create_connection((ph, int(pp or 3128)), 20)
-    s.sendall(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
+    target = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"  # an IPv6 address in brackets
+    s.sendall(f"CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n\r\n".encode())
     resp = b""
     while b"\r\n\r\n" not in resp:
         chunk = s.recv(4096)

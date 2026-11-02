@@ -108,6 +108,12 @@ def _local():
 def session_files():
     """Claude's session files – regular files inside PROJECTS only: the directory belongs to Claude, and tentacontrol
     (root) must not follow a symlink it put there"""
+    claude_home = os.path.dirname(os.path.dirname(PROJECTS))  # data/claude – tentaclAI's own; below it Claude's
+    d = PROJECTS
+    while d != claude_home:  # projects/ or .claude/ a symlink: realpath below would already point elsewhere
+        if os.path.islink(d):
+            return []
+        d = os.path.dirname(d)
     root = os.path.realpath(PROJECTS) + os.sep
     out = []
     for path in glob.glob(os.path.join(PROJECTS, "*", "*.jsonl")):

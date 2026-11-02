@@ -321,6 +321,8 @@ def preview(doc):
             routes = rules.get("routes", {})
             if not isinstance(routes, dict) or set(routes) - set(notify.EVENTS):
                 err = "unknown events in the routes"
+            elif not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in routes.values()):
+                err = "a route is a list of channel ids"
             elif not isinstance(rules.get("quiet", {}), dict) or not isinstance(rules.get("dedupe_min", 0), int):
                 err = "invalid quiet hours or dedupe"
             old = {k: cur[k] for k in rules}
@@ -417,7 +419,7 @@ def apply(doc, picked):
                 c = notify.load()
                 if key.startswith("channel:"):
                     cid = key.split(":", 1)[1]
-                    ch = next(x for x in doc["notifications"]["channels"] if x.get("id") == cid)
+                    ch = next(x for x in doc["notifications"]["channels"] if isinstance(x, dict) and x.get("id") == cid)
                     cur = next((x for x in c["channels"] if x["id"] == cid), None)
                     if cur:
                         cur.update(name=str(ch.get("name") or cid), kind=ch["kind"])
@@ -443,7 +445,7 @@ def apply(doc, picked):
             elif sec.startswith(EXT_PREFIX):
                 extensions.backup_parts()[sec]["apply"](doc[sec])
             done(r, "added" if r["status"] == "new" else "updated")
-        except (ValueError, OSError, KeyError, StopIteration) as e:
+        except (ValueError, OSError, KeyError, StopIteration, TypeError, AttributeError) as e:  # one malformed part, not the whole import
             done(r, str(e) or "not found", ok=False)
     return results, missing(doc)
 

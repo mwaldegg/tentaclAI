@@ -35,7 +35,7 @@ EVENTS = {
     "job_result": ("Job finding", "normal", "a scheduled Claude job reported something (by its notification rule)"),
     "job_failed": ("Job failed", "normal", "a scheduled Claude job failed or ran out of time"),
 }
-ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}\Z")
 
 _queue = None
 _last = {}          # dedupe key → time sent
@@ -75,9 +75,9 @@ def build_url(kind, f):
     if kind == "ntfy":
         server = (f.get("server") or "https://ntfy.sh").strip().rstrip("/")
         topic = (f.get("topic") or "").strip()
-        if not re.match(r"^[A-Za-z0-9_-]{1,64}$", topic):
+        if not re.match(r"^[A-Za-z0-9_-]{1,64}\Z", topic):
             raise ValueError("topic: letters, digits, _ and -")
-        m = re.match(r"^(https?)://([^/]+)$", server)
+        m = re.match(r"^(https?)://([^/]+)\Z", server)
         if not m:
             raise ValueError("server: https://host[:port]")
         scheme = "ntfys" if m.group(1) == "https" else "ntfy"
@@ -86,7 +86,7 @@ def build_url(kind, f):
         return f"{scheme}://{auth}{m.group(2)}/{topic}"
     if kind == "webhook":
         url = (f.get("url") or "").strip()
-        m = re.match(r"^(https?)://(.+)$", url)
+        m = re.match(r"^(https?)://(.+)\Z", url)
         if not m:
             raise ValueError("URL: https://…")
         scheme = "jsons" if m.group(1) == "https" else "json"
@@ -107,7 +107,7 @@ def build_url(kind, f):
     return url
 
 
-EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+\Z")
 SECURITY = {"starttls": 587, "ssl": 465, "none": 25}
 
 
@@ -115,7 +115,7 @@ def email_url(f):
     """Apprise mailto(s) URL: server, port, security (starttls / ssl / none), sender, recipients, optional login"""
     from urllib.parse import quote
     host = (f.get("host") or "").strip()
-    if not re.match(r"^[A-Za-z0-9.-]+$", host):
+    if not re.match(r"^[A-Za-z0-9.-]+\Z", host):
         raise ValueError("server: a host name, e.g. smtp.example.com")
     sec = f.get("security") or "starttls"
     if sec not in SECURITY:

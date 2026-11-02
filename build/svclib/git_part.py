@@ -2,6 +2,7 @@
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import shlex
@@ -218,6 +219,27 @@ def cmd_git_fetch(services, name, pull=False):
     return 0
 
 
+def take_file(src, dest, limit=2 * 2**30):
+    """copy a file Claude made in its stage dir into a dir of root's: a plain file of Claude's, never a symlink
+    (O_NOFOLLOW) or a hard link to someone else's file (owner checked on the open file)"""
+    fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        st = os.fstat(fd)
+        pw = core._account(core.CLAUDE_USER) if core.privileged() else None
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != (pw.pw_uid if pw else os.getuid()) or st.st_nlink != 1:
+            sys.exit("svc: the bundle is not a plain file of Claude's – not pushed")
+        if st.st_size > limit:
+            sys.exit("svc: the bundle is larger than 2 GB – not pushed")
+        with os.fdopen(os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as out:
+            while True:
+                chunk = os.read(fd, 1 << 20)
+                if not chunk:
+                    break
+                out.write(chunk)
+    finally:
+        os.close(fd)
+
+
 def cmd_git_push(services, name, args):
     git, path = get_git(services, name)
     force = any(a in ("-f", "--force") for a in args)
@@ -233,8 +255,14 @@ def cmd_git_push(services, name, args):
         b = os.path.join(stage, "push.bundle")
         if claude_git(["bundle", "create", "--quiet", b, f"refs/heads/{branch}"], path).returncode != 0:
             sys.exit(f"svc: branch {branch} not found in {path}")
-        if git_run(["fetch", "--quiet", b, f"+refs/heads/{branch}:refs/tentaclai/push"], cwd=m).returncode != 0:
-            return 1
+        own = core.stage_dir()  # root's own: the stage dir is Claude's, root never reads a path there that could be swapped
+        try:
+            ob = os.path.join(own, "push.bundle")
+            take_file(b, ob)
+            if git_run(["fetch", "--quiet", ob, f"+refs/heads/{branch}:refs/tentaclai/push"], cwd=m).returncode != 0:
+                return 1
+        finally:
+            shutil.rmtree(own, ignore_errors=True)
         commit = git_run(["rev-parse", "--short", "refs/tentaclai/push"], cwd=m).stdout.strip()
         action = f"git push {branch} ({commit}){' --force' if force else ''} → {git['url']}"
 

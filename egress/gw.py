@@ -11,6 +11,7 @@ import asyncio
 import ipaddress
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -141,7 +142,7 @@ async def resolve(host, port):
         return [host]
     try:
         infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except OSError:
+    except (OSError, UnicodeError):  # a.b..c or a label idna can't encode
         return []
     return sorted(dict.fromkeys(i[4][0] for i in infos), key=lambda a: ":" in a)  # IPv4 first
 
@@ -250,13 +251,25 @@ async def flush():
             os.replace(SEEN_FILE + ".tmp", SEEN_FILE)
 
 
+# an address in a short or numeric form (127.1, 2130706433, 0x7f.0.0.1): getaddrinfo takes it as an IP, the rules
+# would see a name – refused, it has to be written out
+NUMERIC_HOST = re.compile(r"(0x[0-9a-f]*|\d+)(\.(0x[0-9a-f]*|\d+)){0,3}\.?")
+
+
 def split_hostport(s, default):
+    """(host, port) of host:port or [v6]:port – ValueError for a port outside 1–65535 or an address in short form"""
     s = s.strip()
     if s.startswith("["):  # [v6]:port
         h, _, rest = s[1:].partition("]")
-        return h.lower(), int(rest[1:] or default)
-    h, _, p = s.rpartition(":") if s.count(":") == 1 else (s, "", "")
-    return (h or s).lower().rstrip("."), int(p or default)
+        host, port = h.lower(), int(rest[1:] or default)
+    else:
+        h, _, p = s.rpartition(":") if s.count(":") == 1 else (s, "", "")
+        host, port = h.lower().rstrip("."), int(p or default)
+    if not 0 < port < 65536 or not host:
+        raise ValueError("bad port")
+    if NUMERIC_HOST.fullmatch(host) and not tclib.is_ip(host):
+        raise ValueError("an IP address in short form")
+    return host, port
 
 
 async def pipe(r, w):
@@ -282,6 +295,19 @@ def refuse(cw, code, text):
 
 
 async def handle(cr, cw):
+    """one client connection – closed in the end whatever happens on the way"""
+    try:
+        await _handle(cr, cw)
+    except Exception as e:  # noqa: BLE001 – never leave the client hanging on an unexpected error
+        print(f"connection error: {type(e).__name__}: {e}", flush=True)
+    finally:
+        try:
+            cw.close()
+        except OSError:
+            pass
+
+
+async def _handle(cr, cw):
     try:
         head = await asyncio.wait_for(cr.readuntil(b"\r\n\r\n"), 30)
         method, target, version = head.decode("latin-1").split("\r\n")[0].split(" ", 2)

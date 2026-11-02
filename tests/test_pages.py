@@ -1152,3 +1152,13 @@ def test_a_proposal_in_an_old_run_opens_the_history_and_marks_the_tab(client, ap
     html = client.get("/jobs?tab=*").text
     assert '<details class="job-history" open>' in html and "svc misses --x" in html
     assert 'title="1 proposal to pick">1 to pick</span>' in html and '<span class="pill accent">1 to pick</span>' in html
+
+
+def test_approval_buttons_only_for_their_kind(client, app_module):
+    """a network card takes 10 min / 1 h / always / block, a write approve / +15 min – not the other's (a 1 h write grant)"""
+    from app import activity
+    rid = activity.create("demo", "api", "POST /things")
+    assert client.post(f"/approvals/{rid}/net60").status_code == 400
+    assert client.post(f"/approvals/{rid}/always").status_code == 400
+    assert activity.APPROVALS[rid]["status"] == "pending"
+    client.post(f"/approvals/{rid}/deny")

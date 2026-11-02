@@ -12,7 +12,7 @@ import time
 # ---------------------------------------------------------------- .env and ${VAR}
 
 VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-ENV_LINE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")
+ENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")  # compose takes `export KEY=…` too
 
 
 def unquote(v):
@@ -193,7 +193,7 @@ def schedule_text(sched):
     return "?"
 
 
-MAIL_ADDRESS = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+MAIL_ADDRESS = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\Z")
 
 
 def mail_addresses(svc, env):
@@ -240,11 +240,17 @@ def status_text(svc, env):
     return "missing: " + ", ".join(miss) if state == "missing" else state
 
 
+URL_PORTS = {"https": 443, "http": 80, "wss": 443, "ws": 80, "ssh": 22, "git+ssh": 22, "ssh+git": 22, "git": 9418,
+             "ftp": 21, "ftps": 990}
+
+
 def _url_host(url):
     m = re.match(r"^[a-z][a-z0-9+.-]*://(?:[^@/]*@)?(\[[^\]]+\]|[^:/?#]+)(?::(\d+))?", url or "", re.I)
     if not m:
         return None
-    default = {"https": 443, "http": 80, "ssh": 22}.get(url.split(":", 1)[0].lower())
+    default = URL_PORTS.get(url.split(":", 1)[0].lower())
+    if not m.group(2) and not default:
+        return None  # a scheme without a known port: no tentacle rather than one for every port of the host
     return m.group(1).strip("[]").lower(), int(m.group(2)) if m.group(2) else default
 
 
@@ -439,11 +445,11 @@ def write_risks(part, action):
     elif part == "api" and a.upper().startswith("DELETE "):
         found.append("deletes")
     return found[:4]
-SUDO_RE = re.compile(r"^[A-Za-z0-9 ._/=-]{1,60}$")
-ALIAS_RE = re.compile(r"^[A-Za-z0-9._-]{1,40}$")
-HOST_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
-USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
-JUMP_RE = re.compile(r"^([A-Za-z0-9._-]{1,32}@)?[A-Za-z0-9.-]{1,253}(:\d{1,5})?$")
+SUDO_RE = re.compile(r"^[A-Za-z0-9 ._/=-]{1,60}\Z")
+ALIAS_RE = re.compile(r"^[A-Za-z0-9._-]{1,40}\Z")
+HOST_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}\Z")
+USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}\Z")
+JUMP_RE = re.compile(r"^([A-Za-z0-9._-]{1,32}@)?[A-Za-z0-9.-]{1,253}(:\d{1,5})?\Z")
 SSH_KEYS = {"hostname": "HostName", "user": "User", "port": "Port", "proxyjump": "ProxyJump"}
 
 
@@ -706,7 +712,7 @@ def apply_skill_overrides(settings, managed):
 
 # Site skills: procedures of this installation, kept in local/skills/<name>/SKILL.md (root-owned, proposed with
 # `svc config put skill`, approved by the user) and copied by `svc sync` into Claude's ~/.claude/skills/<name>/.
-SITE_SKILL_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")  # Claude Code's rule; a dot (.bak-…) is never a skill
+SITE_SKILL_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}\Z")  # Claude Code's rule; a dot (.bak-…) is never a skill
 SITE_SKILL_MAX = 32 * 1024
 _FRONT = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 
@@ -780,7 +786,7 @@ def site_skills(stack_dir):
 # session (terminal and Remote Control) only through settings.json – `claude remote-control` has no --model.
 MODEL_ALIASES = ("fable", "opus", "sonnet", "haiku")
 EFFORTS = ("low", "medium", "high", "xhigh")
-MODEL_RE = re.compile(r"^[a-z0-9][a-z0-9.\-\[\]]{1,60}$")  # alias or full model id – nothing else reaches settings/frontmatter
+MODEL_RE = re.compile(r"^[a-z0-9][a-z0-9.\-\[\]]{1,60}\Z")  # alias or full model id – nothing else reaches settings/frontmatter
 MODELS_DEFAULT = {"main": "", "effort": "", "subagents": "sonnet", "commands": "sonnet", "commands_effort": ""}
 MODEL_COMMANDS = ("inventory", "onboard")  # slash commands shipped with the image that get the "commands" model
 
@@ -1463,7 +1469,7 @@ def audit_export(entries, fmt="jsonl"):
             if k == "excerpts":
                 v = " | ".join(f"{x.get('reason', '')}: {x.get('text', '')}" for x in v or [])
             v = str(v)
-            row.append("'" + v if v[:1] in ("=", "+", "-", "@") and k not in ("exit", "seconds") else v)  # no formulas
+            row.append("'" + v if v[:1] in ("=", "+", "-", "@", "\t", "\r") and k not in ("exit", "seconds") else v)  # no formulas
         w.writerow(row)
         yield buf.getvalue()
         buf.seek(0)

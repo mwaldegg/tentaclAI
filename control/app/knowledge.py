@@ -75,7 +75,8 @@ def check(item):
     limit = SITE_MAX if site else NOTE_MAX
     clean = (lambda t: str(t or "").replace("\r\n", "\n").strip()[:limit]) if site else (lambda t: _line(t, limit))
     x = {"target": target, "name": "" if site else _line(item.get("name"), 41), "op": op, "old": clean(item.get("old")),
-         "new": clean(item.get("new")), "why": _line(item.get("why"), 300), "state": "proposed"}
+         "new": _line(item.get("new"), NOTE_MAX) if site and op == "add" else clean(item.get("new")),  # an add is one list line, not a new section
+         "why": _line(item.get("why"), 300), "state": "proposed"}
     problem = None
     if target not in TARGETS or op not in OPS:
         problem = "unknown target or operation"

@@ -118,10 +118,14 @@ def update_profile(uid, username, email, name):
     return _update(uid, username=username.strip().lower(), email=email.strip(), name=(name or "").strip())
 
 
-def set_password(pw: str, uid=None) -> None:
-    """the password of this account (default: the admin)"""
-    a = admin()
-    _update(uid or (a or {}).get("id"), hash=_hash_pw(pw))
+def set_password(pw: str, uid=None) -> int:
+    """the password of this account (default: the admin) – signs every browser out (a new session generation);
+    returns it, so the browser that changed it can stay signed in"""
+    uid = uid or (admin() or {}).get("id")
+    u = next((u for u in users() if u.get("id") == uid), None) or {}
+    gen = int(u.get("gen") or 0) + 1
+    _update(uid, hash=_hash_pw(pw), gen=gen)
+    return gen
 
 
 def check_password(pw: str, uid=None) -> bool:
@@ -164,6 +168,7 @@ def sign_in(request: Request, user) -> None:
     request.session.clear()
     request.session["auth"] = True
     request.session["uid"] = user["id"]
+    request.session["gen"] = int(user.get("gen") or 0)
     if is_central_id(user["id"]):
         request.session["central_user"] = user
     elif central.breakglass_open():
@@ -183,9 +188,10 @@ def current_user(request: Request):
         return u if u and central.sso_enabled() else None
     if not request.session.get("breakglass") and not central.local_sign_in():
         return None
-    if uid is None:
-        return admin()
-    return next((u for u in users() if u.get("id") == uid), None)
+    u = admin() if uid is None else next((u for u in users() if u.get("id") == uid), None)
+    if u and int(u.get("gen") or 0) != int(request.session.get("gen") or 0):
+        return None  # signed in before the password was changed (or reset on the host)
+    return u
 
 
 def is_central_id(uid) -> bool:

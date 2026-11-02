@@ -261,9 +261,9 @@ async def security_password(request: Request, current: str = Form(""), password:
         error = "the current password is wrong"
     if error:
         return _security(request, error=error, status=400)
-    await asyncio.to_thread(auth.set_password, password, u["id"])
+    request.session["gen"] = await asyncio.to_thread(auth.set_password, password, u["id"])  # this browser stays signed in
     auth.revoke_trust()
-    return _security(request, done="Password changed – browsers trusted for two-factor sign-in were revoked.")
+    return _security(request, done="Password changed – other browsers are signed out, browsers trusted for two-factor sign-in were revoked.")
 
 
 @router.post("/account/2fa/setup", response_class=HTMLResponse)

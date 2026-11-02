@@ -1140,3 +1140,22 @@ def test_mcp_tool_call_without_an_id_never_reaches_the_server(mcp_gate):
         answer = tg.request(msg)
         assert answer["error"]["code"] == -32600 and answer["id"] is None
     assert mcp_gate["admit"] == []
+
+
+def test_push_bundle_is_taken_only_as_a_plain_file(tmp_path):
+    """root copies the bundle out of Claude's stage dir – a symlink there (to a file of root's) is refused"""
+    target = tmp_path / "root-secret"
+    target.write_text("secret")
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "push.bundle").symlink_to(target)
+    with pytest.raises(OSError):
+        svc.take_file(str(stage / "push.bundle"), str(tmp_path / "out1"))
+    (stage / "push.bundle").unlink()
+    os.link(target, stage / "push.bundle")  # a hard link: two names
+    with pytest.raises(SystemExit, match="not a plain file"):
+        svc.take_file(str(stage / "push.bundle"), str(tmp_path / "out2"))
+    (stage / "push.bundle").unlink()
+    (stage / "push.bundle").write_bytes(b"bundle")
+    svc.take_file(str(stage / "push.bundle"), str(tmp_path / "out3"))
+    assert (tmp_path / "out3").read_bytes() == b"bundle"

@@ -16,7 +16,7 @@ from .envfile import read_env, update_env
 TEMPLATES_DIR = os.path.join(SERVICES_DIR, "_templates")
 OWN_TEMPLATES_DIR = os.path.join(STACK_DIR, "local", "templates")  # imported templates (site data, git-ignored)
 
-NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
+NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}\Z")
 PARTS = tclib.PARTS
 variables = tclib.variables
 

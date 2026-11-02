@@ -54,6 +54,8 @@ def _update(changes, path):
             value = pending.pop(key)
             if value is not None:
                 out.append(f"{key}={_quote(value)}")
+        elif m and m.group(1) in changes:
+            continue  # a later line of a key just written: compose would take that one – it goes
         else:
             out.append(line)
     pending = {k: v for k, v in pending.items() if v is not None}

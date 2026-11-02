@@ -47,3 +47,19 @@ def test_tentacontrol_and_loopback_are_no_destination(monkeypatch):
     assert gw.own_target(["10.200.0.5"]) and gw.own_target(["::ffff:10.200.0.5"])
     assert gw.own_target(["127.0.0.1"]) and gw.own_target(["::1"]) and gw.own_target(["::ffff:127.0.0.1"])
     assert not gw.own_target(["93.184.215.14"]) and not gw.own_target([])
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("target,ok", [
+    ("example.com:443", ("example.com", 443)), ("[2001:db8::1]:22", ("2001:db8::1", 22)), ("10.0.0.1:22", ("10.0.0.1", 22)),
+    ("example.com:0", None), ("example.com:99999", None), ("2130706433:22", None), ("127.1:22", None), ("0x7f.1:443", None),
+    (":443", None), ("1password.com:443", ("1password.com", 443)), ("123.example:443", ("123.example", 443)),
+])
+def test_split_hostport_refuses_odd_targets(target, ok):
+    if ok:
+        assert gw.split_hostport(target, 443) == ok
+    else:
+        with pytest.raises(ValueError):
+            gw.split_hostport(target, 443)

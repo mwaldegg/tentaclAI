@@ -28,9 +28,13 @@ tclib_name() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-
 
 env_value() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | tail -1 | tr -d "'\""; }
 
-set_env() {  # key value – replace or append
-    local tmp; tmp="$(mktemp "$STACK_DIR/.env.XXXX")"
-    awk -v k="$1" -v v="$2" 'BEGIN{d=0} $0 ~ "^"k"=" {print k"="v; d=1; next} {print} END{if(!d) print k"="v}' "$ENV_FILE" > "$tmp"
+set_env() {  # key value – replace or append; a value with other characters than [A-Za-z0-9_./:@+,=-] in single quotes
+    local tmp v="$2"
+    case "$v" in *"'"*|*$'\n'*|*$'\r'*) echo "tentaclai: $1: a value must not contain ' or line breaks" >&2; return 1 ;; esac
+    [[ "$v" =~ ^[A-Za-z0-9_./:@+,=-]*$ ]] || v="'$v'"
+    tmp="$(mktemp "$STACK_DIR/.env.XXXX")"
+    # the value through ENVIRON, not -v: awk -v reads backslash escapes (\n became a line of its own)
+    K="$1" V="$v" awk 'BEGIN{d=0; k=ENVIRON["K"]; v=ENVIRON["V"]} index($0, k"=") == 1 {print k"="v; d=1; next} {print} END{if(!d) print k"="v}' "$ENV_FILE" > "$tmp"
     chmod 600 "$tmp"; mv "$tmp" "$ENV_FILE"
 }
 

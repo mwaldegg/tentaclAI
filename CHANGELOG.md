@@ -77,6 +77,33 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
     entry the central server manages) – the others are added, the skipped ones are named.
   - Central management: a module package the profile manages can no longer be removed, rolled back or replaced locally,
     and a profile can switch a local module (third-party code: `local/extensions`, an unsigned package) off, not on.
+- **Smaller fixes from the code review:**
+  - Sign-in: changing the password signs every other browser out (a leaked session cookie stayed valid up to 12 h);
+    `./tentaclai.sh passwd` signs out all of them.
+  - Approvals: a write approval no longer takes the network card's *Allow 1 h* / *Always* (a 1-hour write grant), a
+    network request no longer *+15 min*.
+  - Jobs: changes of the run history, the job list and the running jobs happen one at a time (a run's final status or
+    a picked proposal could be lost, a proposal run twice); a copy of a built-in job is a job of its own (it could never
+    be deleted); ids of long names stay within 41 characters (a copy of one was refused by `svc config put job`);
+    `schedule` takes only schedule fields (`"profile"` inside it overrode the one at the top); a proposed `svc ssh
+    <host> --` (an interactive shell) is refused; a site rule a run proposes to add stays one line.
+  - Egress gateway: a port outside 1–65535, an empty host or an IP address in short form (`127.1`, `2130706433`) is
+    refused (it was asked about as a name); a name that can't be encoded no longer leaves the connection hanging; every
+    connection is closed after an unexpected error. `ssh` to an IPv6 address works through the gateway.
+  - Tentacles: a URL with an unknown scheme and no port no longer allows every port of its host; `wss://`, `ws://`,
+    `git://` and `ftp://` get their default ports.
+  - `.env`: `export KEY=value` is read like compose reads it; tentacontrol removes later lines of a key it writes
+    (compose takes the last one – a mode toggle never took effect); `./tentaclai.sh init` writes values with a backslash
+    or a space as they were typed (quoted) – `\n` added a line of its own.
+  - Validation: names, aliases, hosts, sudo prefixes and ids no longer accept a trailing line break.
+  - Modules: a package with a file and a folder of the same name is refused instead of a 500; a central profile's
+    package must be the name and version it names (another one was installed again at every sync); an enrollment
+    answer without an agent id or a code with `"ca": null` gives a message instead of a 500.
+  - Import: a malformed notification part (a channel that isn't an object, a route that isn't a list) is refused per
+    row instead of stopping the import halfway.
+  - tentacontrol reads Claude's session files only when `~/.claude/projects` is a real directory (not a symlink).
+  - `svc git push`: root takes the bundle out of Claude's stage directory only as a plain file of Claude's.
+  - Topology: names are escaped for attributes too; audit CSV export also guards values starting with a tab or CR.
 - Jobs: a proposal still to pick in an older run (e.g. a finding under *For tentaclAI*) was hidden in the folded
   history while the sidebar counted it – the history opens and shows "1 to pick", the group tab too.
 - Jobs: a run's details are shown folded under *Details* and rendered (tables, lists, bold, code, links) instead
@@ -161,6 +188,7 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   holds ` #` on purpose (a password with a space before `#`) must be quoted: `KEY='pass #word'`. Check with
   `grep -nE '^[A-Za-z_][A-Za-z0-9_]*=.*[[:space:]]#' .env` (quoted values are fine).
 - Central management: a profile that switched a local module on reports it as *failed* now – switch it on in Modules.
+- Changing the password in tentacontrol (or `./tentaclai.sh passwd`) now signs out the other browsers – sign in there again.
 
 ## v0.23.0 – 2026-10-26
 

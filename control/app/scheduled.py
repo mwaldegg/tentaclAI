@@ -18,6 +18,7 @@ import os
 import re
 import secrets
 import shlex
+import threading
 import time
 import uuid
 
@@ -34,14 +35,24 @@ log = get("jobs")
 JOBS = os.path.join(DATA_DIR, "jobs.json")
 HISTORY = os.path.join(DATA_DIR, "job-history.json")
 ACTIVE = os.path.join(DATA_DIR, "job-runs.json")
+_state = threading.RLock()  # read-modify-write of JOBS, HISTORY and ACTIVE: the runner thread, the action thread,
+                            # requests (to_thread) and the scheduler change them – one at a time, none loses another's change
+
+
+def _locked(fn):
+    def wrapper(*a, **kw):
+        with _state:
+            return fn(*a, **kw)
+    wrapper.__name__, wrapper.__doc__, wrapper.__wrapped__ = fn.__name__, fn.__doc__, fn
+    return wrapper
 KEEP_RUNS = 300
 CATCH_UP = 6 * 3600          # a run missed while tentaclAI was down is made up for if it is at most this old
 QUOTA_SKIP = 90              # skip a scheduled run when a plan limit is at least this full
 PROFILES = {"read-only": "Reads only", "standard": "Can write (like a terminal session)"}
 NOTIFY = {"findings": "only on findings (warn, alert) and failures", "always": "every run", "failure": "only on failures"}
 DAYS = tclib.DAYS
-ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
-TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}\Z")
+TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)\Z")
 
 SCHEMA = {"type": "object", "additionalProperties": False, "required": ["status", "title", "summary"], "properties": {
     "status": {"type": "string", "enum": ["ok", "warn", "alert"],
@@ -86,7 +97,7 @@ def check_action(command):
         raise ValueError("unbalanced quotes")
     if len(argv) < 2 or argv[0] != "svc" or argv[1] in ACTION_REFUSED:
         raise ValueError("only svc commands that act on a tentacle")
-    if argv[1] == "ssh" and len(argv) < 4:
+    if argv[1] == "ssh" and len([a for a in argv[3:] if a != "--"]) < 1:  # svc ssh host -- is a shell too
         raise ValueError("svc ssh needs a command (no interactive shell)")
     if argv[1] == "db" and "shell" in argv[2:4]:
         raise ValueError("no interactive SQL shell")
@@ -155,7 +166,7 @@ HELPERS_REFUSED = {"sh", "bash", "dash", "zsh", "python", "python3", "perl", "ru
                    "timeout", "watch", "crontab", "at", "kill", "pkill", "tmux", "screen", "vi", "vim", "nano", "less", "more",
                    "man", "pip", "pip3", "npm", "npx", "apt", "apt-get", "make", "gcc", "openssl", "base64", "split", "patch",
                    "sort", "uniq"}
-HELPER_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,30}$")
+HELPER_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,30}\Z")
 
 
 def check_helpers(value):
@@ -224,6 +235,7 @@ def _builtin_definition(key):
             "improve": True}
 
 
+@_locked
 def create_builtins():
     """a new installation (first setup) gets the built-in jobs – paused: every run uses the Claude plan"""
     for key in BUILTIN:
@@ -233,12 +245,14 @@ def create_builtins():
             _mark_builtin(key, d["prompt"])
 
 
+@_locked
 def _mark_builtin(key, prompt):
     jobs = load()
     jobs[key].update(builtin=True, builtin_prompt=prompt)
     jsonstore.save(JOBS, jobs)
 
 
+@_locked
 def refresh_builtins():
     """on start: a built-in job whose task the user never changed follows the shipped one (a release may improve it, the
     budget may have changed); a changed task stays as the user wrote it → names of the jobs updated"""
@@ -256,6 +270,7 @@ def refresh_builtins():
     return updated
 
 
+@_locked
 def reset_builtin(jid):
     """a built-in job back to its shipped definition – it keeps whether it is on or paused"""
     job = get(jid)
@@ -347,6 +362,7 @@ def job_mcp_servers(job, known=None):
                            if (known.get(n) or {}).get("enabled") and "mcp" in (known.get(n) or {}).get("parts", {})}}
 
 
+@_locked
 def rename_mentions(old, new):
     """a service or SSH host renamed: @old and `svc … old` in every job's task follow → names of the jobs changed"""
     at = re.compile(r"(?<![\w@.])@" + re.escape(old) + r"(?![\w-])")
@@ -543,6 +559,15 @@ def slug(name):
     return f"{s}-job" if s in RESERVED else s
 
 
+def free_id(base, taken):
+    """base, or base-2, base-3 … – cut so the id stays within ID_RE (41 characters)"""
+    jid, n = base, 2
+    while jid in taken:
+        suffix = f"-{n}"
+        jid, n = base[:41 - len(suffix)].rstrip("-") + suffix, n + 1
+    return jid
+
+
 def validate(form, known=None):
     """form values → the job's fields (raises ValueError) – the editor and `svc config put job` share these rules;
     known: the tentacles @mentions may name (default: the existing ones)"""
@@ -601,6 +626,7 @@ def groups():
     return sorted({j.get("group") for j in load().values() if j.get("group")}, key=str.lower)
 
 
+@_locked
 def set_group(jid, group):
     """move a job to another group ("" = none) – from the Jobs list"""
     check_write("jobs", jid)
@@ -626,6 +652,7 @@ def in_group(group, jobs=None):
     return [k for k, j in sorted(jobs.items(), key=lambda kv: order_key(kv[1])) if (j.get("group") or "") == group]
 
 
+@_locked
 def move(jid, step):
     """move a job up (-1) or down (+1) in its group; returns False at either end"""
     check_write("jobs", jid)
@@ -667,6 +694,7 @@ def _light(run):
     return "alert" if run.get("status") in ("failed", "timeout") else ""
 
 
+@_locked
 def save(form, jid=None, new_id=None, enabled=True):
     """create or update a job from form values; returns its id. new_id: create under this id (svc config put job);
     enabled: the state of a new job (an existing one keeps its own)"""
@@ -680,10 +708,7 @@ def save(form, jid=None, new_id=None, enabled=True):
                 raise ValueError(f"job {new_id} exists")
             jid = new_id
         else:
-            jid = slug(fields["name"])
-            base, n = jid, 2
-            while jid in jobs:
-                jid, n = f"{base}-{n}", n + 1
+            jid = free_id(slug(fields["name"]), jobs)
     elif jid not in jobs:
         raise ValueError("unknown job")
     old = jobs.get(jid, {})
@@ -699,6 +724,9 @@ def save(form, jid=None, new_id=None, enabled=True):
     return jid
 
 
+SCHEDULE_KEYS = {"kind", "time", "day", "hours", "minute", "expr"}
+
+
 def form_from_definition(d):
     """a job definition as JSON (svc config put job) → form values: the schedule object is flattened"""
     if not isinstance(d, dict):
@@ -710,6 +738,9 @@ def form_from_definition(d):
     if not isinstance(sched, dict):
         raise ValueError('schedule: an object, e.g. {"kind": "daily", "time": "07:00"}')
     form = {k: v for k, v in d.items() if k != "schedule"}
+    unknown = set(sched) - SCHEDULE_KEYS  # "profile" inside schedule would win over the one at the top
+    if unknown:
+        raise ValueError(f"schedule: unknown fields: {', '.join(sorted(unknown))}")
     form.update({k: str(v) for k, v in sched.items()})
     form.setdefault("improve", True)  # on unless the definition says otherwise
     for flag in ("scope", "propose", "improve"):
@@ -741,6 +772,7 @@ def put_preview(jid, d):
     return [], warnings, summary
 
 
+@_locked
 def put(jid, d, enabled=False):
     """`svc config put job` after the approval: create (paused unless enabled) or change"""
     check_write("jobs", jid)
@@ -750,6 +782,7 @@ def put(jid, d, enabled=False):
     return save(form, new_id=jid, enabled=enabled)
 
 
+@_locked
 def set_enabled(jid, on):
     check_write("jobs", jid)
     jobs = load()
@@ -761,6 +794,7 @@ def set_enabled(jid, on):
     jsonstore.save(JOBS, jobs)
 
 
+@_locked
 def clone(jid):
     """a paused copy (so it doesn't run twice by accident) – returns the new id"""
     jobs = load()
@@ -768,16 +802,16 @@ def clone(jid):
         raise ValueError("unknown job")
     src = jobs[jid]
     name = f"{src['name'][:53]} (copy)"
-    new = slug(name)
-    base, n = new, 2
-    while new in jobs:
-        new, n = f"{base}-{n}", n + 1
-    jobs[new] = dict({k: v for k, v in src.items() if k not in ("last", "next")}, name=name, enabled=False,
+    new = free_id(slug(name), jobs)
+    # a copy is the user's own job: not built-in (it could never be deleted), without the original's prompt history
+    jobs[new] = dict({k: v for k, v in src.items() if k not in ("last", "next", "builtin", "builtin_prompt", "prompt_history")},
+                     name=name, enabled=False,
                      created=time.time(), next=next_run(src["schedule"], time.time()))
     jsonstore.save(JOBS, jobs)
     return new
 
 
+@_locked
 def delete(jid):
     check_write("jobs", jid)
     jobs = load()
@@ -899,6 +933,7 @@ def should_notify(job, run):
     return rule == "always" or (rule == "findings" and (run.get("result") or {}).get("status") in ("warn", "alert"))
 
 
+@_locked
 def _register(run_id, job):
     act = jsonstore.load(ACTIVE) or {}
     act[run_id] = {"job": job["name"], "profile": job.get("profile", "read-only"), "started": time.time()}
@@ -907,6 +942,7 @@ def _register(run_id, job):
     jsonstore.save(ACTIVE, act, mode=0o600)
 
 
+@_locked
 def _unregister(run_id):
     act = jsonstore.load(ACTIVE) or {}
     if act.pop(run_id, None) is not None:
@@ -1042,6 +1078,7 @@ def quota_full():
                  if lim.get("percent", 0) >= QUOTA_SKIP), "")
 
 
+@_locked
 def run_now(jid, trigger="manual", chain=None):
     """queue a run; returns the run id. chain: the jobs to run after it, one after the other (a group run)"""
     job = get(jid)
@@ -1060,6 +1097,7 @@ def run_now(jid, trigger="manual", chain=None):
     return run_id
 
 
+@_locked
 def run_group(group):
     """run a group's jobs in their order, each after the one before has finished; returns the job ids"""
     ids = in_group(group) if group else []
@@ -1089,6 +1127,7 @@ def chain_next(run_id):
     return None
 
 
+@_locked
 def _update_run(run_id, **fields):
     h = history()
     for r in h:
@@ -1144,6 +1183,7 @@ def execute(run_id, jid):
                     link=notify.control_link(f"/jobs#run-{run_id}"))
 
 
+@_locked
 def run_actions(run_id, picks):
     """run the proposals the user picked – exactly as proposed, one after the other, in the background.
     They go through svc like everything else: read stays read, confirm still asks in Approvals, a limited job stays limited."""
@@ -1165,6 +1205,7 @@ def run_actions(run_id, picks):
     return len(chosen)
 
 
+@_locked
 def discard_actions(run_id, picks=None):
     """mark proposals as discarded – the picked ones, or all still open (picks None)"""
     run = next((r for r in history() if r.get("id") == run_id), None)
@@ -1188,11 +1229,12 @@ def _run_actions(run_id, chosen, job):
     _register(exec_id, {"name": f"{job['name']} (proposal)", "profile": "standard", "scope": job.get("scope"), "prompt": job.get("prompt", "")})
     try:
         for i in chosen:
-            run = next((r for r in history() if r.get("id") == run_id), {})
-            acts = run.get("actions") or []
-            a = acts[i]
-            a["state"] = "running"
-            _update_run(run_id, actions=acts)
+            with _state:
+                run = next((r for r in history() if r.get("id") == run_id), {})
+                acts = run.get("actions") or []
+                a = acts[i]
+                a["state"] = "running"
+                _update_run(run_id, actions=acts)
             try:
                 argv = check_action(a["command"])  # checked again: the history file is tentacontrol's, but be strict
                 # the sh stays the parent: its command line carries the marker (tc-job=…) svc uses for scope and origin
@@ -1201,10 +1243,11 @@ def _run_actions(run_id, chosen, job):
                 a.update(state="done" if code == 0 else "failed", output=_short(out, 1500), ran=time.time())
             except ValueError as e:
                 a.update(state="refused", output=str(e))
-            run = next((r for r in history() if r.get("id") == run_id), {})
-            acts = run.get("actions") or []
-            acts[i] = a
-            _update_run(run_id, actions=acts)
+            with _state:
+                run = next((r for r in history() if r.get("id") == run_id), {})
+                acts = run.get("actions") or []
+                acts[i] = a
+                _update_run(run_id, actions=acts)
     finally:
         _unregister(exec_id)
 
@@ -1229,6 +1272,7 @@ async def worker():
             log.warning(f"jobs: group run: {e}")
 
 
+@_locked
 def due(now=None):
     """jobs whose start time has come → [(id, 'schedule' | 'skipped: …')]; moves their next start on"""
     now = now or time.time()
@@ -1249,6 +1293,7 @@ def due(now=None):
     return out
 
 
+@_locked
 def _skip(jid, why):
     job = get(jid) or {}
     h = history()
@@ -1319,6 +1364,7 @@ def _run(run_id):
     return run
 
 
+@_locked
 def apply_knowledge(run_id, picks):
     """write the knowledge proposals the user picked → [(item, error or None)]; each one is checked again against the
     file as it is now (a note that changed since the run is not touched)"""
@@ -1340,6 +1386,7 @@ def apply_knowledge(run_id, picks):
     return out
 
 
+@_locked
 def discard_knowledge(run_id, picks=None, state="discarded"):
     """mark open proposals as discarded – or, for findings about tentaclAI, as reported"""
     items = _run(run_id).get("knowledge") or []
@@ -1425,6 +1472,7 @@ def words(text):
     return len((text or "").split())
 
 
+@_locked
 def use_prompt(run_id, use=True):
     """take a run's prompt suggestion for its job (the earlier prompt stays in its history) – or discard it"""
     run = _run(run_id)

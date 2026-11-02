@@ -110,3 +110,16 @@ def test_check_quota_survives_restart(app_module):
     week = [{"window": "week", "scope": "all models", "percent": 92, "resets": "Oct 29, 7am"}]
     assert len(usage.check_quota(week)) == 1
     assert usage.check_quota(week) == []  # state is in DATA_DIR, not in memory
+
+
+def test_session_files_refuse_a_symlinked_projects_dir(app_module, tmp_path, monkeypatch):
+    """Claude can replace ~/.claude/projects with a link – tentacontrol (root) must not read where it points"""
+    import os
+    from app import usage
+    home = tmp_path / "claude"
+    (tmp_path / "elsewhere" / "-x").mkdir(parents=True)
+    (tmp_path / "elsewhere" / "-x" / "audit.jsonl").write_text("{}\n")
+    (home / ".claude").mkdir(parents=True)
+    os.symlink(tmp_path / "elsewhere", home / ".claude" / "projects")
+    monkeypatch.setattr(usage, "PROJECTS", str(home / ".claude" / "projects"))
+    assert usage.session_files() == []

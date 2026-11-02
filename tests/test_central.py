@@ -478,3 +478,36 @@ def test_a_server_user_has_no_local_account(fc, app_module, monkeypatch):
     assert "no local account" in page and "/account/2fa/setup" not in page
     assert auth.profile_missing() and not auth.profile_missing({"source": "central", "username": "dev"})
     central.leave()
+
+
+def test_enroll_needs_an_agent_id_and_takes_a_null_ca(fc, monkeypatch):
+    from app import central
+    real = fc.__call__
+
+    def no_id(method, url, body, headers):
+        code, out = real(method, url, body, headers)
+        d = json.loads(out)
+        d.pop("agent_id", None)
+        return code, json.dumps(d).encode()
+    monkeypatch.setattr(type(fc), "__call__", lambda self, *a: no_id(*a))
+    with pytest.raises(central.CentralError, match="no agent id"):
+        central.enroll(fc.code(ca=None), "x", [])
+    assert not central.enrolled()
+
+
+def test_profile_package_must_be_the_named_one(fc, ext, monkeypatch):
+    import importlib.util
+    from app import central, packages
+    spec = importlib.util.spec_from_file_location("tp", os.path.join(os.path.dirname(__file__), "test_packages.py"))
+    tp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tp)
+    priv, pub = tp.new_key()
+    monkeypatch.setattr(packages, "PACKAGE_KEYS", [pub])
+    fc.packages["/packages/tcx_pkg/1.0.0"] = tp.build("tcx_pkg", "1.0.1", priv=priv)  # another version than asked for
+    central.enroll(fc.code(), "dev", ["modules"])
+    fc.set_profile(name="P", sections={}, modes={}, modules={"tcx_pkg": {"package": {"version": "1.0.0"}}})
+    report = central.sync()
+    assert any(r["id"] == "modules:tcx_pkg" and r["result"] == "failed" and "the server sent tcx_pkg 1.0.1" in r["msg"]
+               for r in report["results"])
+    assert packages.installed_versions() == {}
+    central.leave()
