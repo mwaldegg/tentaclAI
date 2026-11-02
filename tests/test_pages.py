@@ -219,8 +219,53 @@ def test_gateway_reaches_only_egress_endpoints(logged_in, monkeypatch):
     assert logged_in.get("/internal/egress/policy").status_code == 200
     assert logged_in.get("/settings", follow_redirects=False).status_code == 403
     assert logged_in.get("/internal/approvals").status_code == 403
-    for path in ("/internal/egress/policy", "/internal/egress/wait/x?wait=0"):  # never through the reverse proxy
-        assert logged_in.get(path, headers={"x-forwarded-for": "10.0.0.1"}).status_code == 403, path
+
+
+
+def test_gateway_endpoints_never_through_the_reverse_proxy(logged_in, monkeypatch):
+    """a proxy in front (any other sender) passing on the gateway's address still doesn't reach them"""
+    from app import netguard
+    monkeypatch.setattr(netguard, "_resolve", lambda n: {"10.0.0.9"} if n == netguard.EGRESS_NAME else set())
+    for path in ("/internal/egress/policy", "/internal/egress/wait/x?wait=0"):
+        assert logged_in.get(path, headers={"x-forwarded-for": "10.0.0.9"}).status_code == 403, path
+
+
+def test_sandbox_cant_pretend_another_address(logged_in, monkeypatch):
+    """proxy headers from the sandbox itself are dropped – a made-up X-Forwarded-For got it past netguard"""
+    _as(monkeypatch, "sandbox")
+    for h in ({"x-forwarded-for": "192.168.1.5"}, {"x-forwarded-for": "192.168.1.5", "x-real-ip": "192.168.1.5"}):
+        assert logged_in.get("/login", headers=h, follow_redirects=False).status_code == 403
+
+
+def test_forwarded_client_is_the_last_untrusted_hop():
+    from app import netguard
+    assert netguard.forwarded_client("10.0.0.2", "6.6.6.6, 192.168.1.5", None) == "192.168.1.5"  # left part: the client's own
+    assert netguard.forwarded_client("10.0.0.2", "", None) == "10.0.0.2"
+    proxies = netguard.trusted_proxies("10.0.0.0/8, 172.16.0.1")
+    assert netguard.forwarded_client("10.0.0.2", "6.6.6.6, 192.168.1.5, 10.1.1.1", proxies) == "192.168.1.5"
+    assert netguard.forwarded_client("10.0.0.2", "10.1.1.1", proxies) == "10.1.1.1"
+    assert netguard.trusted_proxies("*") is None and netguard.trusted_proxies("") is None
+
+
+def test_proxy_headers_only_from_listed_proxies(monkeypatch):
+    import asyncio
+    from app import netguard
+    monkeypatch.setattr(netguard, "_resolve", lambda n: set())
+    monkeypatch.setattr(netguard, "_sandbox_nets", lambda: [])
+    seen = []
+
+    async def app(scope, receive, send):
+        seen.append((scope["client"][0], scope["scheme"], dict(scope["headers"]).get(b"x-forwarded-for")))
+
+    def call(peer, allow):
+        monkeypatch.setenv("FORWARDED_ALLOW_IPS", allow)
+        scope = {"type": "http", "client": (peer, 1), "scheme": "http",
+                 "headers": [(b"x-forwarded-for", b"6.6.6.6, 192.168.1.5"), (b"x-forwarded-proto", b"https")]}
+        asyncio.run(netguard.ProxyHeaders(app)(scope, None, None))
+        return seen.pop()
+    assert call("172.17.0.1", "*") == ("192.168.1.5", "https", b"6.6.6.6, 192.168.1.5")
+    assert call("172.17.0.1", "172.17.0.1") == ("192.168.1.5", "https", b"6.6.6.6, 192.168.1.5")
+    assert call("172.17.0.9", "172.17.0.1") == ("172.17.0.9", "http", None)  # not a listed proxy: headers dropped
 
 
 def test_others_cant_use_egress_endpoints(logged_in, monkeypatch):
@@ -228,6 +273,13 @@ def test_others_cant_use_egress_endpoints(logged_in, monkeypatch):
     assert logged_in.get("/internal/egress/policy").status_code == 403
     assert logged_in.post("/internal/egress/ask", json={"host": "x.test", "port": 443}).status_code == 403
     assert logged_in.get("/settings").status_code == 200
+
+
+def test_gateway_asks_only_about_one_destination(logged_in, monkeypatch):
+    """"Always" puts the asked destination on the allowlist – a pattern there would allow everything"""
+    _as(monkeypatch, "egress")
+    for host, port in (("*.com", 443), ("0.0.0.0/0", 443), ("evil.test", 0), ("evil.test", 70000)):
+        assert logged_in.post("/internal/egress/ask", json={"host": host, "port": port}).status_code == 400, host
 
 
 @pytest.mark.parametrize("version,expect", [(None, "not running"), ("0.0.1", "still runs 0.0.1"), ("same", "applying it in the sandbox failed")])

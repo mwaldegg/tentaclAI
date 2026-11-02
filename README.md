@@ -325,7 +325,7 @@ SSH hosts: tentacontrol → Tentacles → SSH hosts, or `./ssh-host.sh list|add|
 | `GIT_USER_NAME`, `GIT_USER_EMAIL` | default git identity of Claude's commits – a git service can set its own (`"author": {"name", "email"}` in its `git` part) |
 | `GH_TOKEN` | example token variable for the GitHub templates (`${GH_TOKEN}`) – no longer handed to `gh` in the sandbox |
 | `RC_ENABLED`, `RC_NAME`, `RC_WORKDIR`, `RC_EXTRA_ARGS`, `RC_RESTART_DELAY` | Remote Control – re-read on every restart of the session |
-| `JOB_READONLY_HELPERS` | text tools a read-only job may chain with `svc` (empty = the defaults: echo, head, tail, grep, jq, sort, uniq, wc, cut, tr, date, sleep) – shells, interpreters, awk/sed/find/xargs, network and write tools are refused |
+| `JOB_READONLY_HELPERS` | text tools a read-only job may chain with `svc` (empty = the defaults: echo, head, tail, grep, jq, wc, cut, tr, date, sleep) – shells, interpreters, awk/sed/find/xargs, sort/uniq, network and write tools are refused |
 | `EGRESS_MODE`, `EGRESS_LEARN_MINUTES`, `EGRESS_DIRECT_IP` | egress gateway: `learn` (in `.env.example`, length `EGRESS_LEARN_MINUTES`, 60), `permissive` (default when unset) or `enforce`; bare IP targets in enforce mode `block` (default) or `ask` – see [Network control](#network-control) |
 | `INJECTION_GUARD` | prompt-injection safeguards (default on): untrusted markers and hidden-text cleaning for mail/web, scanning in `svc` and the `tc-guard` hook – `false` turns them off, see [Security](#security) |
 | `CLAUDE_TELEMETRY` | `true` allows Claude Code's telemetry, error reports and `/bug` (default: off) |

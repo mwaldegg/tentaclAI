@@ -8,11 +8,13 @@ Every destination is counted in $DATA_DIR/egress-seen.json (host:port → first,
 the built-in list – reported to tentacontrol's audit log, one entry per destination and 15 minutes (refused ones at once).
 """
 import asyncio
+import ipaddress
 import json
 import os
 import socket
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "/app")
@@ -102,6 +104,35 @@ def decide(host, port, ips):
     if tclib.is_ip(host) and pol["direct_ip"] == "block":
         return False, "direct-ip"
     return None, "ask"
+
+
+_control = [0.0, set()]  # ts, addresses of tentacontrol
+
+
+def control_addrs():
+    """tentacontrol's own addresses: never a destination – its /internal/egress endpoints trust the gateway"""
+    if time.time() - _control[0] > 30 or not _control[1]:
+        try:
+            name = urllib.parse.urlsplit(CONTROL).hostname or ""
+            _control[:] = [time.time(), {i[4][0] for i in socket.getaddrinfo(name, None)}]
+        except (OSError, ValueError):
+            pass
+    return _control[1]
+
+
+def _plain(a):
+    """an address in one spelling – ::ffff:10.0.0.1 is 10.0.0.1"""
+    try:
+        ip = ipaddress.ip_address(a)
+    except ValueError:
+        return None
+    return getattr(ip, "ipv4_mapped", None) or ip
+
+
+def own_target(ips):
+    """a connection back to tentacontrol or into the gateway itself (loopback)"""
+    control = {_plain(a) for a in control_addrs()}
+    return any(ip is not None and (ip.is_loopback or ip in control) for ip in map(_plain, ips))
 
 
 async def resolve(host, port):
@@ -274,6 +305,8 @@ async def handle(cr, cw):
     ips = await resolve(host, port)
     if not await policy_ready():
         return refuse(cw, "503 Service Unavailable", "tentaclAI egress: no rules from tentacontrol yet – try again in a moment")
+    if own_target(ips):
+        return refuse(cw, "403 Forbidden", f"tentaclAI egress: {host}:{port} is tentacontrol or the gateway itself – not a destination")
     ok, why = decide(host, port, ips)
     if ok is None:  # the cached policy may predate a service enabled or a token set just now – check fresh first
         await asyncio.to_thread(refresh)

@@ -10,6 +10,7 @@ other address from the sandbox's own network (subnet read from Docker) also coun
 fails, a request from there gets less, not more.
 """
 import ipaddress
+import os
 import socket
 import time
 
@@ -81,3 +82,61 @@ def allowed(path, ip):
     if kind == "egress":
         return False
     return True
+
+
+# ---------- the client address behind a reverse proxy ----------
+
+FORWARDED_HEADERS = (b"x-forwarded-for", b"x-forwarded-proto", b"x-forwarded-host", b"x-forwarded-port", b"x-real-ip",
+                     b"forwarded")
+
+
+def trusted_proxies(value=None):
+    """FORWARDED_ALLOW_IPS (comma-separated addresses/CIDRs): the reverse proxies whose X-Forwarded-For counts – None
+    (default, or *) means any address that is neither the sandbox nor the gateway"""
+    value = os.environ.get("FORWARDED_ALLOW_IPS", "*") if value is None else value
+    if value.strip() in ("", "*"):
+        return None
+    nets = []
+    for part in value.split(","):
+        try:
+            nets.append(ipaddress.ip_network(part.strip(), strict=False))
+        except ValueError:
+            pass
+    return nets
+
+
+def forwarded_client(peer, xff, proxies):
+    """the client behind the proxy chain: the right-most X-Forwarded-For address that is not a trusted proxy – the
+    left part is whatever the client sent itself. Without a proxy list only the last hop (what the proxy saw) counts"""
+    hops = [h.strip() for h in xff.split(",") if h.strip()]
+    if proxies is None:
+        return hops[-1] if hops else peer
+    for h in reversed(hops):
+        if not _in(h, proxies):
+            return h
+    return hops[0] if hops else peer
+
+
+class ProxyHeaders:
+    """X-Forwarded-For/-Proto from a reverse proxy (instead of uvicorn's --proxy-headers, which trusted any sender):
+    never from the sandbox or the gateway – they would set their own address past the checks above and the login
+    throttle – and from anyone else only if FORWARDED_ALLOW_IPS lists them (default: anyone)"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            peer = (scope.get("client") or ("", 0))[0]
+            headers = dict(scope["headers"])
+            proxies = trusted_proxies()
+            if source(peer) != "other" or proxies is not None and not _in(peer, proxies):
+                scope = dict(scope, headers=[(k, v) for k, v in scope["headers"] if k not in FORWARDED_HEADERS])
+            else:
+                scope = dict(scope)
+                if b"x-forwarded-for" in headers:
+                    scope["client"] = (forwarded_client(peer, headers[b"x-forwarded-for"].decode("latin-1"), proxies), 0)
+                proto = headers.get(b"x-forwarded-proto", b"").decode("latin-1").split(",")[-1].strip().lower()
+                if proto in ("http", "https"):
+                    scope["scheme"] = proto if scope["type"] == "http" else {"http": "ws", "https": "wss"}[proto]
+        await self.app(scope, receive, send)

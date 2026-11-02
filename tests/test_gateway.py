@@ -39,3 +39,11 @@ def test_short_outage_of_tentacontrol_stays_quiet(monkeypatch, capsys):
     monkeypatch.setattr(gw, "control", lambda *a, **k: dict(gw.pol, tentacles=[], grants={}))
     gw.refresh()
     assert "works again" in capsys.readouterr().out and gw.failing["n"] == 0
+
+
+def test_tentacontrol_and_loopback_are_no_destination(monkeypatch):
+    """its /internal/egress endpoints trust the gateway – through the gateway, Claude would be the gateway"""
+    monkeypatch.setattr(gw, "_control", [gw.time.time(), {"10.200.0.5"}])
+    assert gw.own_target(["10.200.0.5"]) and gw.own_target(["::ffff:10.200.0.5"])
+    assert gw.own_target(["127.0.0.1"]) and gw.own_target(["::1"]) and gw.own_target(["::ffff:127.0.0.1"])
+    assert not gw.own_target(["93.184.215.14"]) and not gw.own_target([])

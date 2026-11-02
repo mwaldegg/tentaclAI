@@ -145,14 +145,16 @@ SYSTEM_SLEEP = (" Don't wait for external state (CI, deploys): Claude Code block
                 "check – report it as still running instead.")
 READ_ONLY_TOOLS = "Read,Grep,Glob,WebFetch,WebSearch,Bash(svc:*)"
 # text tools a read-only job may chain with svc (`svc … | head`) – Settings → Jobs (JOB_READONLY_HELPERS)
-HELPERS_DEFAULT = ("echo", "head", "tail", "grep", "jq", "sort", "uniq", "wc", "cut", "tr", "date", "sleep")
+HELPERS_DEFAULT = ("echo", "head", "tail", "grep", "jq", "wc", "cut", "tr", "date", "sleep")
 # never: they run code, write files or reach the network – a "helper" must not get around read-only
+# (sort runs a program with --compress-program and writes with -o, uniq writes its second argument)
 HELPERS_REFUSED = {"sh", "bash", "dash", "zsh", "python", "python3", "perl", "ruby", "node", "awk", "gawk", "mawk", "sed",
                    "find", "xargs", "env", "sudo", "su", "tee", "cp", "mv", "rm", "dd", "ln", "chmod", "chown", "install",
                    "mkdir", "touch", "truncate", "tar", "unzip", "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat",
                    "socat", "git", "docker", "tc-connect", "svc", "claude", "eval", "exec", "source", "nohup", "setsid",
                    "timeout", "watch", "crontab", "at", "kill", "pkill", "tmux", "screen", "vi", "vim", "nano", "less", "more",
-                   "man", "pip", "pip3", "npm", "npx", "apt", "apt-get", "make", "gcc", "openssl", "base64", "split", "patch"}
+                   "man", "pip", "pip3", "npm", "npx", "apt", "apt-get", "make", "gcc", "openssl", "base64", "split", "patch",
+                   "sort", "uniq"}
 HELPER_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,30}$")
 
 

@@ -288,6 +288,7 @@ guard() {  # guard <pdf>: the PostToolUse event of a Read of that PDF through tc
     docker exec -i -u claude tctest-claude python3 -c 'import base64, json, sys; print(json.dumps({"tool_name": "Read", "tool_input": {"file_path": "/workspace/" + sys.argv[1]}, "tool_response": {"type": "pdf", "file": {"base64": base64.b64encode(open("/tmp/" + sys.argv[1], "rb").read()).decode()}}}))' "$1" \
         | docker exec -i -u claude tctest-claude /usr/local/bin/tc-guard
 }
+docker exec tctest-claude rm -f /root/.cache/tentaclai/guard.json  # a kept REUSE stack reported this finding < 10 min ago
 check "tc-guard: a clean PDF is no finding" "$(guard clean.pdf)" ""
 check "tc-guard: hidden text in a PDF is found" "$(guard injection.pdf | grep -c 'looks like a prompt injection' || true)" "1"
 wait_for 10 sh -c "docker exec tctest-claude grep -q 'PDF page 2' '$T/data/control/audit.jsonl'" || true
@@ -373,6 +374,7 @@ section "egress gateway"
 # even resolve (000); through the gateway the test API answers 401 (no token)
 check "plain http goes through the gateway too" "$($C curl -s -m 10 -o /dev/null -w '%{http_code}' http://tctest-api:8000/ || true)" "401"
 check "no direct route out" "$($C curl -s -m 3 --noproxy '*' -o /dev/null -w '%{http_code}' https://example.com || true)" "000"
+check "tentacontrol is no destination of the gateway" "$($C curl -s -m 10 --noproxy '' -x http://egress:3128 http://tentacontrol:8080/internal/egress/policy | grep -c 'is tentacontrol or the gateway itself' || true)" "1"
 check "built-in list (github.com)" "$($C curl -s -m 15 -o /dev/null -w '%{http_code}' https://github.com || true)" "200"
 ( $C curl -s -m 70 -o /dev/null -w '%{http_code}' https://example.com > "$T/o.txt" 2>&1 || true ) &
 wait_for 30 pending example.com:443 || true

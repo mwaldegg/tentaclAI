@@ -114,6 +114,7 @@ services:
       DATA_DIR: /data
       LOG_FORMAT: ${LOG_FORMAT:-text}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
     ports:
       # default: only reachable from the host itself; expose via reverse proxy (see compose.override.example.yaml)
       - "${CONTROL_BIND:-127.0.0.1}:${CONTROL_PORT:-8484}:8080"

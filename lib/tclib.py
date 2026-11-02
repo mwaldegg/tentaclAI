@@ -906,7 +906,8 @@ INJECTION_PATTERNS = [
     ("asks to send secrets somewhere", re.compile(
         r"\b(send|forward|upload|post|exfiltrate|leak|e-?mail|schicke?|sende|leite)\b[^\n]{0,80}"
         r"(\b(passwords?|tokens?|secrets?|credentials|api[ _-]?keys?|ssh keys?|private keys?|passw[oö]rter|zugangsdaten)\b|\.env\b|id_(rsa|ed25519))"
-        r"[^\n]{0,80}\b(to|an|at|nach)\b\s+\S*([\w.+-]+@[\w-]+\.[\w.]+|https?://)", _I)),
+        # bounded: \S* before an address that never comes was quadratic on a long word (60k characters > the hook's 10 s)
+        r"[^\n]{0,80}\b(to|an|at|nach)\b\s+\S{0,40}?([\w.+-]{1,64}@[\w-]{1,63}\.[\w.]{1,63}|https?://)", _I)),
 ]
 _BASE64 = re.compile(r"[A-Za-z0-9+/]{500,}={0,2}")
 

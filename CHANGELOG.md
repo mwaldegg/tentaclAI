@@ -49,6 +49,20 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   - MCP: a `tools/call` without an id (a notification) is answered with an error instead of reaching the server
     past the gate.
   - `svc test` looks a stdio MCP command up without a shell.
+- **Security – sandbox → tentacontrol (from a code review):**
+  - tentacontrol took `X-Forwarded-For` from any sender (`--forwarded-allow-ips *`): the sandbox could name another
+    address and reach the login, `/setup` and the admin UI past the network guard, and dodge the login throttle. Proxy
+    headers are now read by tentacontrol itself: never from the sandbox or the gateway, from anyone else the last hop
+    counts (what the reverse proxy saw). `FORWARDED_ALLOW_IPS` in `.env` lists the proxies for a chain (CDN → nginx).
+  - The egress gateway refuses tentacontrol and loopback as destinations – in permissive or learn mode Claude reached
+    `/internal/egress/*` through it and could write audit entries or ask for `*.com` / `0.0.0.0/0`, which *Always*
+    would have put on the allowlist. `/internal/egress/ask` also takes only one destination (no pattern or CIDR).
+  - Read-only jobs: `sort` and `uniq` are no longer text tools for pipes (`sort --compress-program` runs a program,
+    `sort -o` and `uniq` write files) and can't be added in Settings → Jobs.
+  - Injection scan: the result is scanned even if it already holds svc's warning line (copied into a page, it skipped
+    the scan), the output of `svc ssh`, `docker`, `compose`, `db` and `git` is scanned too (container logs, rows,
+    command output), and the "send secrets" pattern no longer takes seconds on a long word (60,000 characters
+    went past the hook's timeout, without a warning).
 - Jobs: a proposal still to pick in an older run (e.g. a finding under *For tentaclAI*) was hidden in the folded
   history while the sidebar counted it – the history opens and shows "1 to pick", the group tab too.
 - Jobs: a run's details are shown folded under *Details* and rendered (tables, lists, bold, code, links) instead
@@ -123,7 +137,12 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   (`pdftotext`) and Playwright with headless Chromium, compilers and web-app tools (about 1.1 GB more; the first build
   downloads Chromium). A project that ran `playwright install` itself can delete `~/.cache/ms-playwright`.
 - `svc <name> <METHOD> <path>` refuses curl options outside the allowlist (see Changes) – a script that passed e.g.
-  `-X` or `-v` gets a message naming the option. Nothing else to do.
+  `-X` or `-v` gets a message naming the option.
+- Reverse proxy: nothing to do for a single proxy in front of tentacontrol (nginx, Traefik, Caddy). With a chain
+  (e.g. Cloudflare → nginx) set `FORWARDED_ALLOW_IPS` in `.env` to the inner proxies' addresses, or the outer proxy's
+  address counts as the client (login throttle, audit).
+- `JOB_READONLY_HELPERS` with `sort` or `uniq`: they are left out now (Settings → Jobs shows them as refused). Nothing
+  else to do.
 
 ## v0.23.0 – 2026-10-26
 

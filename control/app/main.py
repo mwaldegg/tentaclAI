@@ -120,7 +120,7 @@ async def secure_cookie(request: Request, call_next):
 
 @app.middleware("http")
 async def tag_request(request: Request, call_next):
-    """outermost (added last): the request id for the log lines and the audit entries of this request (cid), sent back as X-Request-ID"""
+    """outermost of the http middlewares (added last): the request id for the log lines and the audit entries of this request (cid), sent back as X-Request-ID"""
     rid = request_id(request.headers.get("x-request-id", ""))
     token = REQUEST_ID.set(rid)
     try:
@@ -129,6 +129,10 @@ async def tag_request(request: Request, call_next):
         REQUEST_ID.reset(token)
     response.headers["X-Request-ID"] = rid
     return response
+
+
+# around everything: the client address behind a reverse proxy is settled before any middleware reads it
+app.add_middleware(netguard.ProxyHeaders)
 
 
 async def migrate():

@@ -183,6 +183,9 @@ async def internal_egress_ask(request: Request):
         host, port = egress.normalize(str(data.get("host", ""))), int(data.get("port", 0))
     except (ValueError, TypeError):
         return JSONResponse({"error": "bad target"}, status_code=400)
+    if "*" in host or "/" in host or ":" in host and not tclib.is_ip(host) or not 0 < port < 65536:
+        # one destination, as the gateway saw it – "Always" would put a pattern (*.com, 0.0.0.0/0) on the allowlist
+        return JSONResponse({"error": "bad target"}, status_code=400)
     rid = activity.create(f"{host}:{port}", "network", "connect")
     a, client = activity.APPROVALS[rid], data.get("client_port")
     if isinstance(client, int) and 0 < client < 65536 and not a.get("lookup"):
