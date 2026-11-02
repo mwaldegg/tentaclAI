@@ -7,4 +7,4 @@ bcrypt>=4.2,<6
 docker>=7.1,<8
 segno>=1.6,<2
 apprise>=1.9,<3
-cryptography>=43,<47  # Ed25519: signed module packages (packages.py) and tentaclAI Enterprise license keys
+cryptography>=43,<51  # Ed25519: signed module packages (packages.py) and tentaclAI Enterprise license keys
