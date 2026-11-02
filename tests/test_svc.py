@@ -94,7 +94,9 @@ def test_redact_text_with_escaped_quotes():
     (["inspect", "pg"], False, True),
     (["container", "inspect", "pg"], False, True),
     (["docker", "inspect", "--format", "x", "pg"], False, True),
-    (["sudo", "docker", "inspect", "pg"], False, False),  # svc strips the host's sudo prefix before asking
+    (["sudo", "docker", "inspect", "pg"], False, True),  # svc strips the host's sudo prefix before asking – blanked anyway
+    (["-l", "info", "inspect", "pg"], False, True),  # a global option's value before the command
+    (["-p", "x", "config"], True, True),
     (["logs", "-f", "pg"], False, False),
     (["ps"], False, False),
     (["config"], True, True),
@@ -1047,3 +1049,88 @@ def test_bundle_to_claude_keeps_local_only_tags(tmp_path, monkeypatch):
     assert svc.bundle_to_claude("repo", {"url": "https://example.com/r.git"}, str(work))
     tags = subprocess.run(["git", "tag", "-l"], cwd=work, capture_output=True, text=True).stdout.split()
     assert "local-only" in tags and "v2" in tags
+
+
+@pytest.mark.parametrize("extra, refused", [
+    (["-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10"], None),  # svc test
+    (["-sS", "-H", "Accept: x", "-d", '{"a": 1}'], None),
+    (["-sd@body.json"], None), (["--json", "{}", "-G", "--data-urlencode", "q=x"], None), (["-iL"], None),
+    (["-X", "DELETE"], "-X"), (["-sX", "POST"], "-X"), (["--request", "PUT"], "--request"),
+    (["-v"], "-v"), (["--trace-ascii", "-"], "--trace-ascii"), (["--libcurl", "x.c"], "--libcurl"),
+    (["-K", "cfg"], "-K"), (["--url", "https://evil"], "--url"), (["-x", "http://evil"], "-x"),
+    (["--connect-to", "::evil:443"], "--connect-to"), (["https://evil/"], "second URL"),
+    (["--data=x"], "without ="), (["-w", "%{url_effective}"], "URL"), (["-H", "X: a\nB: c"], "control character"),
+    (["-d"], "needs a value"),
+])
+def test_api_curl_args_are_an_allowlist(extra, refused):
+    """extra curl args never change the method (the write gate decides by it), the target or print the credentials"""
+    err = svc.curl_args_error("/x", extra)
+    assert (err is None) if refused is None else (refused in err), (extra, err)
+
+
+def test_api_path_and_config_values_refuse_line_breaks():
+    """a line break in a curl config file starts a new option (url = …, then proxy = or header = from Claude)"""
+    assert "control character" in svc.curl_args_error("/x\nproxy = http://evil", [])
+    with pytest.raises(SystemExit):
+        svc._q("https://h/x\nurl = https://evil")
+    assert svc._q('a "b" \\') == '"a \\"b\\" \\\\"'
+
+
+@pytest.mark.parametrize("sql, writes", [
+    ("select 1", False), ("SELECT * FROM t; select 2;", False), ("select 1; delete from t", True),
+    ("select 'a;delete' from t", False), ("select $$;drop table t$$", False), ("select 1 -- ; delete\n", False),
+    ("select 1 /* ; */; update t set a=1", True), ("with x as (delete from t returning *) select * from x", True),
+    ("insert into t values (1)", True), ("", True), ("select 'it''s'; drop table t", True),
+])
+def test_sql_writes_looks_at_every_statement(sql, writes):
+    assert svc.sql_writes(sql) is writes
+
+
+def test_db_reads_without_approval_run_read_only_and_no_psql_meta_commands(monkeypatch):
+    """a write the check misses (SELECT … INTO, a function) fails in the read-only session; \\! would run a shell"""
+    runs = []
+    monkeypatch.setattr(svc, "get_part", lambda services, name, part: {"engine": "postgres", "access": "confirm"})
+    monkeypatch.setattr(svc, "db_run", lambda name, db, sql=None, fmt="table", interactive=False, ro=None: runs.append((sql, ro)) or 0)
+    assert svc.cmd_db({}, ["pg", "select", "1"]) == 0
+    assert runs == [("select 1", True)]
+    for sql in ("\\! id", "  \\copy t to x"):
+        with pytest.raises(SystemExit, match="meta-commands"):
+            svc.cmd_db({}, ["pg", sql])
+
+
+@pytest.mark.parametrize("args, compose, ok", [
+    (["ps"], False, True), (["-l", "info", "ps"], False, True), (["--log-level=info", "logs", "x"], False, True),
+    (["--version"], False, True), (["network", "ls"], False, True),
+    (["--log-level", "info", "rm", "-f", "x"], False, False), (["-H", "tcp://x", "ps"], False, False),
+    (["--config", "/tmp/c", "ps"], False, False), (["-l", "ps", "rm", "x"], False, False),
+    (["ps"], True, True), (["-p", "x", "logs"], True, True), (["--profile", "ps", "down"], True, False),
+    (["-p", "logs", "down"], True, False), (["-f", "other.yml", "ps"], True, False),
+])
+def test_docker_read_only_skips_global_options_first(args, compose, ok):
+    assert svc._ro_allowed(args, compose=compose) is ok
+
+
+@pytest.mark.parametrize("cmd, ok", [
+    (["date"], True), (["date", "+%s"], True), (["date", "-u", "--iso-8601=seconds"], True),
+    (["date", "-s", "2020-01-01"], False), (["date", "0101120020"], False),
+    (["hostname"], True), (["hostname", "-f"], True), (["hostname", "evil"], False), (["hostname", "-F", "/x"], False),
+    (["ip", "-br", "a"], True), (["ip", "-batch", "/tmp/x"], False), (["ip", "-force", "-b", "/tmp/x"], False),
+    (["ip", "route", "restore"], False),
+    (["systemctl", "status", "x"], True), (["systemctl", "--no-pager", "status", "x"], True), (["systemctl", "--failed"], True),
+    (["systemctl", "-p", "status", "restart", "x"], False), (["systemctl", "--property", "status", "stop", "x"], False),
+    (["systemctl", "--property=Id", "show", "x"], True),
+    (["ps", "aux"], True), (["ps", "-ef"], True), (["ps", "auxe"], False), (["ps", "e"], False),
+])
+def test_ssh_read_only_status_commands_only_read(monkeypatch, cmd, ok):
+    monkeypatch.setattr(svc, "ssh_sudo", lambda alias: "")
+    assert svc.ssh_read_only("box", cmd) is ok
+
+
+def test_mcp_tool_call_without_an_id_never_reaches_the_server(mcp_gate):
+    """a notification gets no answer – a server that runs it anyway would bypass the gate"""
+    tg = svc.ToolGate("demo", {"access": "confirm"})
+    for msg in ({"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "wipe"}},
+                {"jsonrpc": "2.0", "id": None, "method": "tools/call", "params": {"name": "wipe"}}):
+        answer = tg.request(msg)
+        assert answer["error"]["code"] == -32600 and answer["id"] is None
+    assert mcp_gate["admit"] == []

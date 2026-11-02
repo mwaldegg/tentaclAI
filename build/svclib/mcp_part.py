@@ -113,8 +113,10 @@ class ToolGate:
         if rid is not None and method:
             with self.lock:
                 self.methods[json.dumps(rid)] = (method, bool(params.get("cursor")))
-        if method != "tools/call" or rid is None:
+        if method != "tools/call":
             return None
+        if rid is None:  # a notification gets no answer – a server that runs it anyway would bypass the gate
+            return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "MCP proxy: tools/call needs an id"}}
         tool = str(params.get("name", ""))[:200]
         action = call_action(tool, params.get("arguments"))
         kind = self.kind(tool)

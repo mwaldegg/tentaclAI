@@ -18,6 +18,13 @@ SSH_READ = {"uptime", "df", "free", "ps", "ls", "hostname", "whoami", "id", "una
 SSH_SHELL_CHARS = set(";&|$`<>(){}\\\n")
 SYSTEMCTL_READ = {"status", "is-active", "is-enabled", "is-failed", "list-units", "list-unit-files", "list-timers",
                   "list-sockets", "list-dependencies", "show", "cat", "--failed"}
+SYSTEMCTL_FLAGS = {"--no-pager", "--all", "-a", "--full", "-l", "--plain", "--no-legend", "--user", "--system", "--failed",
+                   "-q", "--quiet", "--no-ask-password"}
+DATE_FLAGS = {"-u", "--utc", "--universal", "-R", "--rfc-email", "-I", "--debug"}
+HOSTNAME_FLAGS = {"-f", "--fqdn", "--long", "-s", "--short", "-d", "--domain", "-i", "--ip-address", "-I",
+                  "--all-ip-addresses", "-A", "--all-fqdns", "-a", "--alias", "-y", "--yp", "--nis"}
+IP_OPTION = re.compile(r"-{1,2}(4|6|s|stats|statistics|d|details|br|brief|j|json|p|pretty|o|oneline|h|human|r|resolve|"
+                       r"c|color|colour)(=(always|auto|never))?")
 JOURNAL_WRITE = ("--vacuum", "--rotate", "--flush", "--sync", "--relinquish", "--smart-relinquish", "--setup-keys",
                  "--update-catalog")
 
@@ -41,12 +48,25 @@ def ssh_read_only(alias, cmd):
     if head == "docker":
         return bool(args) and docker_part._ro_allowed(rest)
     if head == "systemctl":
-        return bool(args or rest) and all(a in SYSTEMCTL_READ for a in args[:1] or rest[:1])
+        # options before the verb only without a separate value: in `-p status restart x` the verb is restart
+        verb = next((a for a in rest if not a.startswith("-")), None)
+        before = rest[:rest.index(verb)] if verb else rest
+        if not all(a in SYSTEMCTL_FLAGS or a.startswith("--") and "=" in a for a in before):
+            return False
+        return verb in SYSTEMCTL_READ if verb else "--failed" in rest
+    if head == "date":  # a time or -s/--set sets the clock
+        return all(a.startswith("+") or a in DATE_FLAGS or a.startswith(("--iso-8601", "--rfc-3339=")) for a in rest)
+    if head == "hostname":  # a name, -F or -b sets it
+        return all(a in HOSTNAME_FLAGS for a in rest)
     if head == "journalctl":
         return not any(a.startswith(JOURNAL_WRITE) for a in rest)
     if head == "ip":
+        if any(a.startswith("-") and not IP_OPTION.fullmatch(a) for a in rest):  # -batch reads commands from a file
+            return False
         return not args or args[0] in ("a", "addr", "address", "r", "route", "l", "link", "n", "neigh") and \
-            not any(a in ("add", "del", "delete", "set", "change", "replace", "flush", "append") for a in args[1:])
+            not any(a in ("add", "del", "delete", "set", "change", "replace", "flush", "append", "restore") for a in args[1:])
+    if head == "ps":  # BSD-style e (ps e, ps auxe) prints every process's environment – tokens included
+        return not any("e" in a for a in args)
     if head == "ss":
         return not any(a in ("-K", "--kill") or (a.startswith("-") and not a.startswith("--") and "K" in a) for a in rest)
     return True

@@ -55,13 +55,14 @@ def _redact_text(text):
 def sensitive_read(words, compose=False):
     """True for docker/compose/systemctl reads whose output shows secrets (see redact)"""
     w = [a for a in words if not a.startswith("-")]
+    # any word, not just the first: a global option's value (-p x config, -l info inspect) comes before the command
     if compose:
-        return bool(w) and w[0] == "config"
+        return "config" in w
     if w[:1] == ["systemctl"]:
-        return len(w) > 1 and w[1] in ("show", "cat")
+        return "show" in w or "cat" in w
     if w[:1] == ["docker"]:
         w = w[1:]
-    return bool(w) and (w[0] == "inspect" or (len(w) > 1 and w[1] == "inspect"))
+    return "inspect" in w
 
 
 def call_redacted(argv, **kw):

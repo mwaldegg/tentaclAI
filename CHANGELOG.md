@@ -31,6 +31,24 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   about 1.1 GB.
 
 ### Changes / fixes
+- **Security – svc access modes (from a code review):**
+  - API calls: extra curl arguments are an allowlist (body, headers, output, timing). `-X` turned a GET into a write
+    without approval, `-v`/`--trace` printed the credentials, a further word was called as a second URL with the same
+    headers, `--url`/`--proxy`/`--connect-to`/`-K` changed the target. `-w` may no longer print the URL.
+  - API and web: a line break in the path (or any value written to curl's config file) is refused – it started a new
+    curl option, e.g. a proxy that received the service's credentials.
+  - Databases: every statement of a script is checked (`select 1; delete from t` counted as a read), reads that need no
+    approval run in a read-only session on `confirm` databases too (a write in `SELECT … INTO` or a function fails
+    there), psql meta-commands (`\!` runs a shell) are refused.
+  - docker/compose: global options before the command are read first – `--log-level info rm -f x` counted as a read;
+    options other than `-l`/`-D` (compose: `-p`, `--profile`, `--ansi`, …) need approval. Output with `inspect` or
+    `config` anywhere in the command is blanked.
+  - ssh status commands: `date` and `hostname` only print (`date -s`, `hostname name` need approval), `ip` takes only
+    display options (`-batch` read commands from a file), `systemctl` options with a value before the verb need
+    approval (`-p status restart x` restarted x), `ps e` (the environment of every process) needs approval.
+  - MCP: a `tools/call` without an id (a notification) is answered with an error instead of reaching the server
+    past the gate.
+  - `svc test` looks a stdio MCP command up without a shell.
 - Jobs: a proposal still to pick in an older run (e.g. a finding under *For tentaclAI*) was hidden in the folded
   history while the sidebar counted it – the history opens and shows "1 to pick", the group tab too.
 - Jobs: a run's details are shown folded under *Details* and rendered (tables, lists, bold, code, links) instead
@@ -103,8 +121,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - `git pull`, `docker compose build`, `docker compose up -d` – all three images change (gateway, svc, tentacontrol):
   recreating `tentaclai` ends running sessions and Remote Control. The sandbox image now contains `poppler-utils`
   (`pdftotext`) and Playwright with headless Chromium, compilers and web-app tools (about 1.1 GB more; the first build
-  downloads Chromium). A project that ran `playwright install` itself can delete `~/.cache/ms-playwright`. Nothing
-  else to do.
+  downloads Chromium). A project that ran `playwright install` itself can delete `~/.cache/ms-playwright`.
+- `svc <name> <METHOD> <path>` refuses curl options outside the allowlist (see Changes) – a script that passed e.g.
+  `-X` or `-v` gets a message naming the option. Nothing else to do.
 
 ## v0.23.0 – 2026-10-26
 

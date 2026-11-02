@@ -48,8 +48,24 @@ def docker_services(services, usable=True):
     return out
 
 
+# global options a read may carry before the command (anything else – -H, --config, -f … – needs approval)
+RO_GLOBAL_DOCKER = ({"-D", "--debug", "-v", "--version", "--help"}, {"-l", "--log-level"})
+RO_GLOBAL_COMPOSE = ({"--dry-run", "--compatibility", "--all-resources", "-v", "--version", "--help"},
+                     {"-p", "--project-name", "--profile", "--ansi", "--progress", "--parallel"})
+
+
 def _ro_allowed(args, compose=False):
-    words = [a for a in args if not a.startswith("-")]
+    flags, values = RO_GLOBAL_COMPOSE if compose else RO_GLOBAL_DOCKER
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        a = args[i]
+        if a in values:
+            i += 2
+        elif a in flags or a.split("=", 1)[0] in values and "=" in a:
+            i += 1
+        else:
+            return False
+    words = args[i:]
     if not words:
         return True
     if compose:

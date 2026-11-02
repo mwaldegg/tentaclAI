@@ -2,6 +2,7 @@
 (MCP servers, skills, SERVICES.md, instructions)."""
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -75,7 +76,7 @@ def cmd_test(services, name):
                 good = rc == 0 and out not in ("", "000", "401", "403", "404")
                 report("mcp", good, f"{m['url']} reachable → HTTP {out or '–'}" + (" (authentication rejected)" if out in ("401", "403") else ""))
             else:
-                found = subprocess.run(["sh", "-c", f"command -v {m.get('command', '')}"], capture_output=True).returncode == 0
+                found = bool(m.get("command")) and shutil.which(str(m["command"])) is not None  # never through a shell (root)
                 report("mcp", found, f"stdio command {m.get('command')} {'found' if found else 'not found'}")
         elif part in ("smtp", "imap"):
             report(part, *mail_part.mail_test(part, core.render(svc[part])))

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 import hashlib
+import re
 
 from . import core, gate, safeguards
 
@@ -19,6 +20,9 @@ def cmd_call(services, name, method, path, extra):
     miss = core.missing_vars(api)
     if miss:
         sys.exit(f"svc: {name} not enabled – empty in .env: {', '.join(miss)}")
+    bad = curl_args_error(path, extra)
+    if bad:
+        sys.exit(f"svc: {bad}")
     api = core.render(api)
     url = api["base_url"].rstrip("/") + "/" + path.lstrip("/")
     auth = api.get("auth", {"type": "none"})
@@ -38,7 +42,7 @@ def cmd_call(services, name, method, path, extra):
     if not any(a.lower().startswith("content-type") for a in extra) and any(a in ("-d", "--data", "--data-raw", "--json") for a in extra):
         headers.append("Content-Type: application/json")
     # secrets (headers, basic auth, URL with query token) go through 0600 files on tmpfs, never into argv
-    config.append('url = "' + url.replace("\\", "\\\\").replace('"', '\\"') + '"')
+    config.append(f"url = {_q(url)}")
     files = []
     try:
         for content in ("\n".join(headers) + "\n", "\n".join(config) + "\n"):
@@ -63,6 +67,68 @@ def cmd_call(services, name, method, path, extra):
     finally:
         for f in files:
             os.unlink(f)
+
+
+# curl options svc passes on: the request's body, headers, output and timing. Not the method (-X: the write gate
+# decides by it), the target (--url, a second URL, --proxy, --connect-to), a config (-K) or what prints the request's
+# own headers with the credentials (-v, --trace, --libcurl). Short flags may be bundled (-sS), values attached (-dX).
+CURL_FLAGS = {"-i": "--include", "-I": "--head", "-s": "--silent", "-S": "--show-error", "-f": "--fail", "-L": "--location",
+              "-G": "--get", "-g": "--globoff", "-N": "--no-buffer", "-0": "--http1.0", "-j": "--junk-session-cookies"}
+CURL_LONG_FLAGS = {"--fail-with-body", "--compressed", "--path-as-is", "--http1.1", "--http2", "--no-progress-meter",
+                   "--raw", "--fail-early", "--remote-time", "--create-dirs"}
+CURL_VALUES = {"-d": "--data", "-F": "--form", "-H": "--header", "-o": "--output", "-w": "--write-out", "-m": "--max-time",
+               "-D": "--dump-header", "-b": "--cookie", "-c": "--cookie-jar", "-A": "--user-agent", "-e": "--referer",
+               "-T": "--upload-file", "-r": "--range", "-z": "--time-cond", "-Y": "--speed-limit", "-y": "--speed-time"}
+CURL_LONG_VALUES = {"--data-raw", "--data-binary", "--data-urlencode", "--json", "--form-string", "--connect-timeout",
+                    "--retry", "--retry-delay", "--retry-max-time", "--max-redirs", "--max-filesize", "--limit-rate",
+                    "--expect100-timeout"}
+
+
+def _control_chars(text):
+    return any(ord(c) < 32 or ord(c) == 127 for c in text)
+
+
+def curl_args_error(path, extra):
+    """why the path or the extra curl arguments are refused – None when they are fine"""
+    if _control_chars(path):
+        return "the path contains a control character (line break, tab …) – encode it (%0A …)"
+    long_flags = set(CURL_FLAGS.values()) | CURL_LONG_FLAGS
+    long_values = set(CURL_VALUES.values()) | CURL_LONG_VALUES
+    i = 0
+    while i < len(extra):
+        a = extra[i]
+        value = None
+        if a in long_values or a in CURL_VALUES:
+            if i + 1 >= len(extra):
+                return f"{a} needs a value"
+            i += 1
+            value = extra[i]
+        elif a in long_flags:
+            pass
+        elif a.startswith("-") and not a.startswith("--") and len(a) > 1:
+            for j, c in enumerate(a[1:], 1):
+                if "-" + c in CURL_VALUES:
+                    value = a[j + 1:]
+                    if not value:
+                        if i + 1 >= len(extra):
+                            return f"-{c} needs a value"
+                        i += 1
+                        value = extra[i]
+                    a = "-" + c
+                    break
+                if "-" + c not in CURL_FLAGS:
+                    return f"curl option -{c} is not allowed here (svc sets the method, target and credentials itself)"
+        elif a.startswith("-"):
+            return (f"curl option {a.split('=')[0]} is not allowed here (svc sets the method, target and credentials itself)"
+                    + (" – the value goes in the next argument, without =" if "=" in a else ""))
+        else:
+            return f"unexpected argument {a[:60]!r} – curl would call it as a second URL; the path is the third argument"
+        if value is not None and a in ("-w", "--write-out") and re.search(r"url|json|referer", value, re.I):
+            return "-w may not print the URL (it can hold the credentials) – use %{http_code}, %{time_total} …"
+        if value is not None and a in ("-H", "--header") and _control_chars(value):
+            return "a header contains a control character"
+        i += 1
+    return None
 
 
 def fail_on_http_error(extra):
@@ -93,6 +159,9 @@ def _curl_secret(argv_head, config_lines):
 
 
 def _q(v):
+    """a quoted value for a curl config file – a line break would start a new option there"""
+    if _control_chars(str(v)):
+        sys.exit("svc: a value contains a control character (line break, tab …) – encode it (%0A …)")
     return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 

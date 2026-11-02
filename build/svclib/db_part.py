@@ -26,9 +26,10 @@ def db_engine(db):
     return "mysql" if e in ("mysql", "mariadb") else "postgres"
 
 
-def db_run(name, db, sql=None, fmt="table", interactive=False):
-    """run SQL (or an interactive client) – password only in env / a 0600 tmpfs file, read enforced per session"""
-    ro = gate.access_mode(db) == "read"
+def db_run(name, db, sql=None, fmt="table", interactive=False, ro=None):
+    """run SQL (or an interactive client) – password only in env / a 0600 tmpfs file; ro (default: access read) makes
+    the session read-only, so a write hidden in a read (SELECT … INTO, a function) fails there"""
+    ro = gate.access_mode(db) == "read" if ro is None else ro
     if sql is not None and ro and DB_RO_BYPASS.search(sql):
         sys.exit(f"svc: {name} is read-only – statements that change the transaction mode are not allowed")
     if db_engine(db) == "postgres":
@@ -97,9 +98,11 @@ def cmd_db(services, args):
             sys.exit("svc: invalid table name")
         return db_run(name, db, f"\\d {t}" if pg else f"DESCRIBE `{t.replace('.', '`.`')}`", fmt)
     sql = " ".join(rest)
+    if pg and sql.lstrip().startswith("\\"):  # psql would run it as a meta-command (\! runs a shell)
+        sys.exit(f"svc: psql meta-commands are not allowed – svc db {name} tables | describe <table>, or plain SQL")
     if mode != "read" and sql_writes(sql):
         return gate.guarded(name, "db", mode, f"SQL: {sql}", lambda: db_run(name, db, sql, fmt))
-    return db_run(name, db, sql, fmt)
+    return db_run(name, db, sql, fmt, ro=True)
 
 
 def db_test(name, db):
@@ -125,8 +128,51 @@ def db_test(name, db):
     return False, (r.stderr.strip().splitlines() or ["error"])[-1][:180]
 
 
+def sql_statements(sql):
+    """the statements of a script, split at ; outside quotes, dollar quotes and comments"""
+    out, cur, i, n = [], [], 0, len(sql)
+    while i < n:
+        c = sql[i]
+        if c in "'\"`":
+            j = i + 1
+            while j < n and not (sql[j] == c and not (j + 1 < n and sql[j + 1] == c)):
+                j += 2 if sql[j] == c or (sql[j] == "\\" and c != '"') else 1
+            cur.append(sql[i:j + 1])
+            i = j + 1
+            continue
+        if sql.startswith("--", i):
+            j = sql.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if sql.startswith("/*", i):
+            j = sql.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            cur.append(" ")
+            continue
+        m = re.match(r"\$[A-Za-z_]*\$", sql[i:]) if c == "$" else None
+        if m:
+            j = sql.find(m.group(0), i + len(m.group(0)))
+            j = n if j < 0 else j + len(m.group(0))
+            cur.append(sql[i:j])
+            i = j
+            continue
+        if c == ";":
+            out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        i += 1
+    out.append("".join(cur))
+    return [s.strip() for s in out if s.strip()]
+
+
 def sql_writes(sql):
-    s = sql.strip()
+    """True when one of the statements may change something (it then needs approval on confirm databases)"""
+    parts = sql_statements(sql)
+    return not parts or any(_statement_writes(s) for s in parts)
+
+
+def _statement_writes(s):
     if safeguards.READ_SQL.match(s) and not (s.lower().startswith(("explain analyze",)) and safeguards.WRITE_SQL.search(s)):
         return False
     if re.match(r"^\s*with\b", s, re.I):
