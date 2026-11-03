@@ -8,7 +8,6 @@ Every destination is counted in $DATA_DIR/egress-seen.json (host:port → first,
 the built-in list – reported to tentacontrol's audit log, one entry per destination and 15 minutes (refused ones at once).
 """
 import asyncio
-import ipaddress
 import json
 import os
 import re
@@ -122,18 +121,16 @@ def control_addrs():
 
 
 def _plain(a):
-    """an address in one spelling – ::ffff:10.0.0.1 is 10.0.0.1"""
     try:
-        ip = ipaddress.ip_address(a)
+        return tclib.plain_ip(a)
     except ValueError:
         return None
-    return getattr(ip, "ipv4_mapped", None) or ip
 
 
 def own_target(ips):
-    """a connection back to tentacontrol or into the gateway itself (loopback)"""
+    """a connection back to tentacontrol or into the gateway itself (loopback, 0.0.0.0 and :: reach it too)"""
     control = {_plain(a) for a in control_addrs()}
-    return any(ip is not None and (ip.is_loopback or ip in control) for ip in map(_plain, ips))
+    return any(ip is not None and (ip.is_loopback or ip.is_unspecified or ip in control) for ip in map(_plain, ips))
 
 
 async def resolve(host, port):
@@ -331,7 +328,7 @@ async def _handle(cr, cw):
     ips = await resolve(host, port)
     if not await policy_ready():
         return refuse(cw, "503 Service Unavailable", "tentaclAI egress: no rules from tentacontrol yet – try again in a moment")
-    if own_target(ips):
+    if await asyncio.to_thread(own_target, ips):  # may look up tentacontrol's addresses
         return refuse(cw, "403 Forbidden", f"tentaclAI egress: {host}:{port} is tentacontrol or the gateway itself – not a destination")
     ok, why = decide(host, port, ips)
     if ok is None:  # the cached policy may predate a service enabled or a token set just now – check fresh first

@@ -104,7 +104,7 @@ def cmd_origin_of(port):
         sys.exit("svc: origin-of is for tentacontrol only")
     if not port.isdigit() or not 0 < int(port) < 65536:
         sys.exit("svc: origin-of <port>")
-    found, res = core.port_socket(int(port)), {}
+    found, res = core.port_socket(int(port), remote=core.proxy_port()), {}
     if found:  # looked up as the socket's owner: only it may read its processes' fds and environment
         inode, uid = found
 

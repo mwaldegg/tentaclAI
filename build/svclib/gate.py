@@ -342,12 +342,3 @@ def cmd_audit(args):
         print(f"svc audit: only the newest {len(entries)} matching entries, from {entries[-1]['ts'][:19]} – older ones "
               "in the window are left out; raise n or narrow the search", file=sys.stderr)
     return 0
-    for e in reversed(entries):
-        v = e.get("_view") or tclib.audit_view(e)
-        extra = f" exit {e['exit']}" if "exit" in e else f" ×{e['count']}" if "count" in e else ""
-        print(f"{e['ts'][:19]}  {v['actor']:<6} {v['type']:<7} {v['outcome']:<8} {v['target'][:16]:<16} {v['action'][:90]}{extra}")
-        if e.get("error"):
-            print(f"{'':<21}↳ {e['error'].replace(chr(10), ' · ')[:160]}")
-        if e.get("reason"):
-            print(f"{'':<21}↳ reason: {e['reason'][:160]}")
-    return 0

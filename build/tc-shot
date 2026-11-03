@@ -7,6 +7,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { chromium } = require('playwright');
 
 const USAGE = 'usage: tc-shot <url|file.html> <out.png> [--width 1280] [--height 800] [--full] [--wait ms] [--selector css] [--insecure]\n'
@@ -43,7 +44,7 @@ function target(t) {
     if (/^[a-z][a-z0-9+.-]*:/i.test(t)) return t;
     const p = path.resolve(t);
     if (!fs.existsSync(p)) throw new Error(`no such file: ${t} (a URL needs its scheme, e.g. https://)`);
-    return 'file://' + p;
+    return pathToFileURL(p).href;  // a # or % in the name would otherwise end or change the path
 }
 
 function isPng(file) {

@@ -13,19 +13,22 @@ from . import core, gate, safeguards
 
 DB_RO_BYPASS = re.compile(r"read\s+write|default_transaction_read_only|transaction_read_only|tx_read_only|"
                           r"session\s+characteristics|\bset\s+role\b|\bset\s+session\s+authorization\b", re.I)
-# SQL that may run text as SQL, or quoting/comments postgres and mysql read differently: checked as written
-DB_RAW_CHECK = re.compile(r"\\|\$|--|#|/\*|\b(execute|exec|prepare|do|call|set_config|dblink\w*|query_to_xml\w*)\b", re.I)
+# outside '…' literals: comments, dollar and unicode quoting, dynamic SQL and server-side files – a read-only session
+# only gets SQL whose text both the check and the engine read the same way, and that can't leave the session
+DB_RO_REFUSE = re.compile(r"--|#|/\*|\$|\bu&|\b(execute|exec|prepare|do|call|set_config|dblink\w*|query_to_xml\w*|"
+                          r"copy|lo_\w+|pg_\w*file\w*|outfile|dumpfile)\b", re.I)
 
 
-def ro_bypass(sql):
-    """True when SQL may switch a read-only session to read-write. Text in plain '…' literals and SHOW statements
-    (they only read a setting) don't count – but only where both engines split the text the same way"""
-    if DB_RAW_CHECK.search(sql):
-        return bool(DB_RO_BYPASS.search(sql))
+def ro_bypass(sql, pg=True):
+    """True when SQL may leave a read-only session (switch it to read-write, run text as SQL, write server files) –
+    or the check can't tell. Text in plain '…' literals and SHOW statements (they only read a setting) don't count"""
+    if "\\" in sql:  # an escape in mysql, a plain character in postgres: the engines would split the text differently
+        return True
+    quotes = "'\"" if pg else "'\"`"  # backticks only quote in mysql
     out, i, n = [], 0, len(sql)
     while i < n:
         c = sql[i]
-        if c in "'\"`":  # '…' dropped, "…"/`…` (identifiers in postgres) kept
+        if c in quotes:  # '…' dropped, "…"/`…` (identifiers, in mysql also "…" strings) kept
             j = i + 1
             while j < n and not (sql[j] == c and not (j + 1 < n and sql[j + 1] == c)):
                 j += 2 if sql[j] == c else 1
@@ -34,7 +37,10 @@ def ro_bypass(sql):
             continue
         out.append(c)
         i += 1
-    return any(DB_RO_BYPASS.search(st) for st in "".join(out).split(";") if not re.match(r"\s*show\b", st, re.I))
+    text = "".join(out)
+    if DB_RO_REFUSE.search(text):
+        return True
+    return any(DB_RO_BYPASS.search(st) for st in text.split(";") if not re.match(r"\s*show\b", st, re.I))
 
 
 def pg_sslmode(db):
@@ -51,11 +57,7 @@ def db_engine(db):
 def db_run(name, db, sql=None, fmt="table", interactive=False, ro=None):
     """run SQL (or an interactive client) – password only in env / a 0600 tmpfs file; ro (default: access read) makes
     the session read-only, so a write hidden in a read (SELECT … INTO, a function) fails there"""
-    mode = gate.access_mode(db)
-    ro = mode == "read" if ro is None else ro
-    if sql is not None and ro and ro_bypass(sql):
-        what = "is read-only" if mode == "read" else "runs reads in a read-only session"
-        sys.exit(f"svc: {name} {what} – statements that change the transaction mode are not allowed")
+    ro = gate.access_mode(db) == "read" if ro is None else ro
     if db_engine(db) == "postgres":
         addr, lport = core.tunnel(db.get("host", ""), db.get("port", 5432))
         env = dict(PGHOST=str(db.get("host", "")), PGHOSTADDR=addr, PGPORT=str(lport),
@@ -124,8 +126,12 @@ def cmd_db(services, args):
     sql = " ".join(rest)
     if pg and sql.lstrip().startswith("\\"):  # psql would run it as a meta-command (\! runs a shell)
         sys.exit(f"svc: psql meta-commands are not allowed – svc db {name} tables | describe <table>, or plain SQL")
-    if mode != "read" and sql_writes(sql):
+    # SQL a read-only session can't be trusted with is a write: approval on confirm, refused on read
+    if mode != "read" and (sql_writes(sql, pg) or ro_bypass(sql, pg)):
         return gate.guarded(name, "db", mode, f"SQL: {sql}", lambda: db_run(name, db, sql, fmt))
+    if ro_bypass(sql, pg):
+        sys.exit(f"svc: {name} is read-only – no comments, backslashes, $ or U& quoting, EXECUTE/DO/CALL/set_config, COPY "
+                 f"or file functions, and nothing that changes the transaction mode")
     return db_run(name, db, sql, fmt, ro=True)
 
 
@@ -152,15 +158,16 @@ def db_test(name, db):
     return False, (r.stderr.strip().splitlines() or ["error"])[-1][:180]
 
 
-def sql_statements(sql):
-    """the statements of a script, split at ; outside quotes, dollar quotes and comments"""
+def sql_statements(sql, pg=True):
+    """the statements of a script, split at ; outside quotes, dollar quotes and comments (backslash escapes and
+    backtick quotes only in mysql)"""
     out, cur, i, n = [], [], 0, len(sql)
     while i < n:
         c = sql[i]
-        if c in "'\"`":
+        if c in ("'\"" if pg else "'\"`"):
             j = i + 1
             while j < n and not (sql[j] == c and not (j + 1 < n and sql[j + 1] == c)):
-                j += 2 if sql[j] == c or (sql[j] == "\\" and c != '"') else 1
+                j += 2 if sql[j] == c or (sql[j] == "\\" and not pg and c != "`") else 1
             cur.append(sql[i:j + 1])
             i = j + 1
             continue
@@ -190,9 +197,9 @@ def sql_statements(sql):
     return [s.strip() for s in out if s.strip()]
 
 
-def sql_writes(sql):
+def sql_writes(sql, pg=True):
     """True when one of the statements may change something (it then needs approval on confirm databases)"""
-    parts = sql_statements(sql)
+    parts = sql_statements(sql, pg)
     return not parts or any(_statement_writes(s) for s in parts)
 
 

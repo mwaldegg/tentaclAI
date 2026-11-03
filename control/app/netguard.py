@@ -14,6 +14,8 @@ import os
 import socket
 import time
 
+import tclib
+
 from . import dockerops
 from .config import CLAUDE_CONTAINER
 
@@ -57,10 +59,9 @@ def _sandbox_nets():
 def _plain(ip):
     """one spelling per address – ::ffff:192.168.80.3 is 192.168.80.3; '' for no address"""
     try:
-        a = ipaddress.ip_address(ip)
+        return str(tclib.plain_ip(ip))
     except ValueError:
         return ""
-    return str(getattr(a, "ipv4_mapped", None) or a)
 
 
 def _in(ip, nets):

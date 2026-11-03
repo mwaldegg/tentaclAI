@@ -177,8 +177,18 @@ def _tmux(env):
     return {}
 
 
-def port_socket(port, proc="/proc"):
-    """the sandbox's TCP connection from local port `port` (to the egress gateway) → (socket inode, owner uid) or None"""
+def proxy_port():
+    """the egress gateway's port (from PROXY) – None when there is none"""
+    from urllib.parse import urlsplit
+    try:
+        return urlsplit(PROXY).port if PROXY else None
+    except ValueError:
+        return None
+
+
+def port_socket(port, proc="/proc", remote=None):
+    """the sandbox's TCP connection from local port `port` (to the egress gateway: remote port `remote`, when given –
+    another connection may use the same local port towards elsewhere) → (socket inode, owner uid) or None"""
     for f in ("tcp", "tcp6"):
         try:
             with open(os.path.join(proc, "net", f)) as fh:
@@ -187,7 +197,8 @@ def port_socket(port, proc="/proc"):
             continue
         for row in rows:
             col = row.split()
-            if len(col) > 9 and col[3] != "0A" and int(col[1].rsplit(":", 1)[1], 16) == port and col[9] != "0":
+            if len(col) > 9 and col[3] != "0A" and int(col[1].rsplit(":", 1)[1], 16) == port and col[9] != "0" and (
+                    remote is None or int(col[2].rsplit(":", 1)[1], 16) == remote):
                 return col[9], int(col[7])  # 0A = LISTEN: a server on the same number is not it
     return None
 

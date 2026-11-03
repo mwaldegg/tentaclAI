@@ -176,8 +176,20 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   blocks a longer `sleep`, also chained, so they used to poll turn by turn (#80).
 - Injection scan: imperatives like "Next run svc …" or "First use svc …" are flagged as "asks to run commands" again
   (#84).
-- `svc db`: reads on `write`/`confirm` databases may mention `read write` in a string or `SHOW transaction_read_only`
-  again; statements that change the transaction mode stay refused (#96).
+- `svc db`: reads may mention `read write` in a string or `SHOW transaction_read_only` again (#96). What a read-only
+  session can't be trusted with – comments, backslashes, `$`/`U&` quoting, `EXECUTE`/`PREPARE`/`DO`/`CALL`/`set_config`,
+  `COPY`, file functions (`lo_export`, `INTO OUTFILE`), anything that changes the transaction mode – is refused on
+  `read` databases and counts as a write (approval) on `confirm` ones; `BEGIN READ/**/WRITE` and string-built
+  `set_config` names slipped past the old check. The statement splitter reads backslashes and backticks per engine
+  (`'a\'` ends the literal in postgres).
+- Security, more from the second review: curl `-w @file` (a format read from a file) and `-e ';auto'` (the URL with its
+  token as referer on redirects) are refused; a basic-auth user or password with `"` or `\` is quoted for curl's config;
+  the gateway refuses `0.0.0.0` and `::` (they reach the gateway itself); `svc jobs` output (`--steps`: what a job's
+  Claude saw) is scanned by tc-guard; tc-guard keeps its per-session warnings only in a directory of its own (mode 0700),
+  not one another user created in `/tmp`.
+- `svc jobs` lists a group's jobs in the order *Run the group* follows; `svc origin-of` matches the connection to the
+  gateway's port too; `tc-shot` file URLs encode `#` and `%`; a repeated approval request keeps its *again* mark over
+  a restart.
 - `svc ssh <host> ps -eo pid,user,etime` (option values) is a free status command again; `ps e`/`ps auxe` still need
   approval (#95).
 - `svc jobs` takes a job's display name too, as the audit log shows it (#94).
@@ -209,6 +221,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   sign in once more (their cookie jars start empty). Scripts on the host that looked for `tcrun` processes need the new names.
 - A service file named outside `a-z 0-9 _ -` (max 41) or with a `"name"` other than its file name is no longer loaded –
   tentacontrol → Tentacles lists it as an error; rename the file (and its `"name"`).
+- `svc db` on `read` databases refuses SQL with comments, backslashes, `$`-quoting, `COPY` or `EXECUTE`/`DO`/`CALL`/`set_config`
+  – drop the comments, use plain literals; on `confirm` databases such SQL now asks for approval.
 - New Claude sessions pick up the `PreCompact` hook from the managed settings written at container start (recreate).
 
 ## v0.23.0 – 2026-10-26

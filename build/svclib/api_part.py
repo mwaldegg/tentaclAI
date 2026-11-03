@@ -34,7 +34,7 @@ def cmd_call(services, name, method, path, extra):
     elif t == "header":
         headers.append(f"{auth['header']}: {auth['value']}")
     elif t == "basic":
-        config.append(f'user = "{auth["user"]}:{auth["password"]}"')
+        config.append(f'user = {_q(str(auth["user"]) + ":" + str(auth["password"]))}')
     elif t == "query":
         url += ("&" if "?" in url else "?") + f"{auth['param']}={auth['value']}"
     elif t == "oauth2_client_credentials":
@@ -123,8 +123,10 @@ def curl_args_error(path, extra):
                     + (" – the value goes in the next argument, without =" if "=" in a else ""))
         else:
             return f"unexpected argument {a[:60]!r} – curl would call it as a second URL; the path is the third argument"
-        if value is not None and a in ("-w", "--write-out") and re.search(r"url|json|referer", value, re.I):
-            return "-w may not print the URL (it can hold the credentials) – use %{http_code}, %{time_total} …"
+        if value is not None and a in ("-w", "--write-out") and (value.startswith("@") or re.search(r"url|json|referer", value, re.I)):
+            return "-w may not print the URL (it can hold the credentials) or read its format from a file – use %{http_code}, %{time_total} …"
+        if value is not None and a in ("-e", "--referer") and ";" in value:  # ;auto sends the previous URL on redirects
+            return "-e takes a plain referer (no ;auto – it would send the URL with its credentials on)"
         if value is not None and a in ("-H", "--header") and _control_chars(value):
             return "a header contains a control character"
         i += 1

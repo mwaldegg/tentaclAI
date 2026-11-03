@@ -46,7 +46,8 @@ def test_tentacontrol_and_loopback_are_no_destination(monkeypatch):
     monkeypatch.setattr(gw, "_control", [gw.time.time(), {"10.200.0.5"}])
     assert gw.own_target(["10.200.0.5"]) and gw.own_target(["::ffff:10.200.0.5"])
     assert gw.own_target(["127.0.0.1"]) and gw.own_target(["::1"]) and gw.own_target(["::ffff:127.0.0.1"])
-    assert not gw.own_target(["93.184.215.14"]) and not gw.own_target([])
+    assert gw.own_target(["0.0.0.0"]) and gw.own_target(["::"]) and gw.own_target(["::ffff:0.0.0.0"])
+    assert not gw.own_target(["93.184.215.14"]) and not gw.own_target([]) and not gw.own_target(["not-an-ip"])
 
 
 import pytest  # noqa: E402

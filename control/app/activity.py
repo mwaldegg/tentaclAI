@@ -242,6 +242,7 @@ def create(service, part, action, origin=None, review=None, cid=""):
     same = _again(str(service)[:60], str(part)[:20], str(action)[:500], o)
     if same:
         same["again"] = True
+        save()
         return same["id"]
     rid = str(next(_ids))
     a = {"id": rid, "service": str(service)[:60], "part": str(part)[:20], "action": str(action)[:500],
