@@ -2,7 +2,7 @@
 
 All notable changes, newest first. Every release lists **upgrade steps** from the previous one.
 
-## Unreleased
+## v0.24.0 – 2026-11-03
 
 ### Highlights
 - **Job groups:** sort jobs by topic – an optional *Group* per job (editor: click an existing group or type a new
