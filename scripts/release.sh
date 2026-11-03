@@ -9,11 +9,18 @@
 # a red CI stops the release before anything is tagged.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-DRY=""
-[ "${1:-}" = "--dry-run" ] && { DRY=1; shift; }
-VER="${1:-}"; TITLE="${2:-}"
 die() { echo "✗ $*" >&2; exit 1; }
 step() { echo "== $*"; }
+DRY=""; ARGS=()
+for a in "$@"; do  # --dry-run anywhere – after the subtitle it once went unnoticed and released for real
+    case "$a" in
+        --dry-run) DRY=1 ;;
+        -*) die "unknown option $a" ;;
+        *) ARGS+=("$a") ;;
+    esac
+done
+[ "${#ARGS[@]}" -le 2 ] || die "too many arguments – quote the subtitle"
+VER="${ARGS[0]:-}"; TITLE="${ARGS[1]:-}"
 [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "usage: $0 [--dry-run] X.Y.Z [\"subtitle\"]"
 REPO="$(git remote get-url origin | sed -E 's#^(https://github.com/|git@github.com:)##; s#\.git$##')"
 
