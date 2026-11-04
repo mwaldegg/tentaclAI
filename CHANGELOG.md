@@ -2,6 +2,15 @@
 
 All notable changes, newest first. Every release lists **upgrade steps** from the previous one.
 
+## Unreleased
+
+### Changes / fixes
+- **SSH → Add host: "This host" works again** – the button did nothing (`Unexpected end of input` in the browser
+  console): the alias in its `onclick` broke the attribute's double quotes. Thanks @dashorty (#99, #100).
+
+### Upgrade
+- `git pull`, `docker compose build control`, `docker compose up -d control` – only tentacontrol changes.
+
 ## v0.24.0 – 2026-11-03
 
 ### Highlights
