@@ -2,7 +2,7 @@ name: pr-hints
 
 # A friendly comment on pull requests: is there a test, is CHANGELOG.md left alone (the changelog line goes into the
 # PR description, or the maintainers write it). pull_request_target so it can comment on PRs from forks – it never
-# checks out or runs the PR's code, it only reads the file list and the description through the API.
+# checks out or runs the PR's code, it only reads the file list through the API and the description from the event.
 on:
   pull_request_target:
     types: [opened, edited, synchronize, reopened]
@@ -11,23 +11,27 @@ permissions:
   contents: read
   pull-requests: write
 
+concurrency:  # quick pushes: only the newest run writes the comment
+  group: pr-hints-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   hints:
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.head_ref, 'simplify/') && github.actor != 'dependabot[bot]' }}
+    # a title or base edit changes nothing the hints look at
+    if: ${{ !startsWith(github.head_ref, 'simplify/') && github.actor != 'dependabot[bot]' && (github.event.action != 'edited' || github.event.changes.body) }}
     steps:
       - name: Comment
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          BODY: ${{ github.event.pull_request.body }}
         run: |
-          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' > files.txt
-          gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' > body.txt
-          python3 - <<'PY' > comment.md
+          export FILES="$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')"
+          notes="$(python3 - <<'PY'
           import os, re
-          files = open("files.txt").read().split()
-          body = open("body.txt").read()
+          files = os.environ["FILES"].split()
           docs = re.compile(r"(^docs/|^\.github/|\.md$|^LICENSE)")
           code = [f for f in files if not docs.search(f)]
           tests = [f for f in files if f.startswith("tests/") or f == "scripts/test-sandbox.sh"]
@@ -40,21 +44,23 @@ jobs:
               notes.append("**No need to edit `CHANGELOG.md`** – two PRs editing it always collide. Put one line "
                            "`Changelog: …` into the PR description instead (or leave it out, we write it). "
                            "Please drop the change to `CHANGELOG.md`.")
-          has_line = re.search(r"^Changelog:[ \t]*\S", body, re.M)
-          print("<!-- tc-pr-hints -->")
-          if notes:
-              print("Thanks for the pull request! Two things make merging quick:\n" if len(notes) > 1
-                    else "Thanks for the pull request! One thing makes merging quick:\n")
-              for n in notes:
-                  print(f"- {n}")
-          else:
-              print("✓ All set – thanks!" + ("" if has_line else
-                    " The changelog entry is written on merge (or add a line `Changelog: …` to the description)."))
-          print("\n<sub>This comment updates itself when you push or edit the description.</sub>")
+          has_line = re.search(r"^Changelog:[ \t]*\S", os.environ.get("BODY", ""), re.M)
+          with open("comment.md", "w") as out:
+              print("<!-- tc-pr-hints -->", file=out)
+              if notes:
+                  print("Thanks for the pull request! Before merging:\n", file=out)
+                  for n in notes:
+                      print(f"- {n}", file=out)
+              else:
+                  print("✓ All set – thanks!" + ("" if has_line else
+                        " The changelog entry is written on merge (or add a line `Changelog: …` to the description)."), file=out)
+              print("\n<sub>This comment updates itself when you push or edit the description.</sub>", file=out)
+          print(len(notes))
           PY
+          )"
           id="$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- tc-pr-hints -->"))) | .id' | head -1)"
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@comment.md >/dev/null
-          elif grep -q '^- ' comment.md; then  # all fine from the start: no comment at all
+          elif [ "$notes" != 0 ]; then  # all fine from the start: no comment at all
             gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@comment.md >/dev/null
           fi

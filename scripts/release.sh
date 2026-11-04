@@ -11,6 +11,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 die() { echo "✗ $*" >&2; exit 1; }
 step() { echo "== $*"; }
+commit() { git commit -q -F - <<EOF
+$1
+${RELEASE_TRAILERS:+
+$RELEASE_TRAILERS}
+EOF
+}
 DRY=""; ARGS=()
 for a in "$@"; do  # --dry-run anywhere – after the subtitle it once went unnoticed and released for real
     case "$a" in
@@ -85,20 +91,12 @@ step "commit, tag, push"
 sed -i "0,/^## Unreleased\$/s//## v$VER – $(date +%F)/" CHANGELOG.md
 echo "$VER" > VERSION
 git add CHANGELOG.md VERSION
-git commit -q -F - <<EOF
-Release v$VER
-${RELEASE_TRAILERS:+
-$RELEASE_TRAILERS}
-EOF
+commit "Release v$VER"
 git tag -a "v$VER" -m "v$VER"
 # an empty Unreleased section for what comes next – the code review job and maintainers always find where entries go
 sed -i "0,/^## v$VER – /s//## Unreleased\n\n### Changes \/ fixes\n\n### Upgrade\n\n&/" CHANGELOG.md
 git add CHANGELOG.md
-git commit -q -F - <<EOF
-CHANGELOG: open the Unreleased section after v$VER
-${RELEASE_TRAILERS:+
-$RELEASE_TRAILERS}
-EOF
+commit "CHANGELOG: open the Unreleased section after v$VER"
 git_auth push -q origin main "v$VER"
 
 step "GitHub release"
