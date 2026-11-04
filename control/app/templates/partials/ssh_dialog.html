@@ -45,7 +45,7 @@
   {{ head("Add host", "Step 1 of 3 – where is the host?") }}
   <div class="row small" style="margin:-6px 0 12px;gap:8px"><span class="muted">The host tentaclAI runs on?</span>
     <button type="button" class="btn sm" title="hostname host.docker.internal – the sandbox reaches its own host there"
-      onclick="var f=this.form;f.hostname.value='host.docker.internal';if(!f.alias.value)f.alias.value={{ (this_host or 'docker-host') | lower | tojson | forceescape}};if(!f.user.value)f.user.value='root'">This host</button></div>
+      onclick="var f=this.form;f.hostname.value='host.docker.internal';if(!f.alias.value)f.alias.value={{ (this_host or 'docker-host') | lower | tojson | forceescape }};if(!f.user.value)f.user.value='root'">This host</button></div>
   {{ host_fields(f, hosts) }}
   <div class="field"><label class="check"><input type="checkbox" name="docker" value="1" {{ 'checked' if f.get('docker', '1') }}>
     Docker host – also add a Docker service for it</label>

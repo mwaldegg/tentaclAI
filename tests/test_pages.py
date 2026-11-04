@@ -842,7 +842,12 @@ def test_add_host_also_adds_the_docker_service(client, app_module, monkeypatch):
         docker_ok["v"] = False
         html = client.post("/ssh/new/deploy", data=dict(form, alias="nodocker")).text
         assert "No Docker service created" in html and "nodocker" not in [s["name"] for s in services_store.load_all()]
-        assert "This host" in client.get("/ssh/new").text and 'name="docker" value="1" checked' in client.get("/ssh/new").text
+        page = client.get("/ssh/new").text
+        assert "This host" in page and 'name="docker" value="1" checked' in page
+        import re
+        # the alias is a JS string inside onclick="…": its quotes must be escaped, or the attribute ends early (#99)
+        onclick = re.search(r'onclick="(var f=this\.form;f\.hostname\.value=[^"]*)"', page)
+        assert onclick and "f.alias.value=&#34;" in onclick.group(1) and "f.user.value='root'" in onclick.group(1)
     finally:
         for a in ("Nas.home", "other", "nodocker"):
             if sshhosts.get(a):
