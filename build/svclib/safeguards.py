@@ -217,3 +217,8 @@ def cmd_tool_report(args, services=None):
 
 READ_SQL = re.compile(r"^\s*(select|show|describe|desc|explain|values|table|\\d)\b", re.I)
 WRITE_SQL = re.compile(r"\b(insert|update|delete|merge|upsert|create|alter|drop|truncate|grant|revoke|replace|rename|copy|call|do|lock)\b", re.I)
+# a read that writes: SELECT … INTO (a new table), row locks, functions with a side effect – a function of the database's
+# own can still write unseen (it runs in a read-only session on read and confirm databases, so only write is affected)
+SIDE_SQL = re.compile(r"\b(into|for\s+(?:no\s+key\s+)?update|for\s+(?:key\s+)?share|setval|nextval|pg_notify|dblink_exec|"
+                      r"pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|pg_switch_wal|pg_create_restore_point|"
+                      r"lo_(?:import|export|unlink|create|creat|from_bytea|put)|get_lock|release_lock|release_all_locks)\b", re.I)

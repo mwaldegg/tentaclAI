@@ -205,7 +205,7 @@ section "svc through the gateway"
 check "API call with injected token" "$($C svc testapi GET / 2>/dev/null)" '{"auth_ok": true}'
 check "database query" "$($C svc db testdb 'select 41+1' 2>/dev/null | sed -n 3p | tr -d ' ')" "42"
 # a SELECT with a side effect: runs on a write database, fails in the read-only session of a read one (#97)
-$C svc db testdbrw 'create sequence if not exists tc_seq' >/dev/null 2>&1 || true
+check "write database: CREATE SEQUENCE runs" "$($C svc db testdbrw 'create sequence if not exists tc_seq' >/dev/null 2>&1 && echo ok || echo failed)" "ok"
 check "write database: SELECT setval() runs" "$($C svc db testdbrw "select setval('tc_seq', 41) + 1" 2>/dev/null | sed -n 3p | tr -d ' ')" "42"
 check "read database: … refused by the read-only session" "$($C svc db testdb "select nextval('tc_seq')" 2>&1 | grep -c 'read-only transaction' || true)" "1"
 check "ssh (tentacle, rw)" "$($C svc ssh testssh echo ssh-ok 2>&1 | tail -1)" "ssh-ok"

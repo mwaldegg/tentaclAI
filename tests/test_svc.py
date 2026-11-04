@@ -1111,30 +1111,60 @@ def test_sql_writes_follows_mysql_quoting():
 
 
 def test_db_reads_without_approval_run_read_only_and_no_psql_meta_commands(monkeypatch):
-    """a write the check misses (SELECT … INTO, a function) fails in the read-only session; \\! would run a shell"""
+    """a write the check misses (a function of the database's own) fails in the read-only session; \\! would run a shell"""
     runs = []
     monkeypatch.setattr(svc, "get_part", lambda services, name, part: {"engine": "postgres", "access": "confirm"})
     monkeypatch.setattr(svc, "db_run", lambda name, db, sql=None, fmt="table", interactive=False, ro=None: runs.append((sql, ro)) or 0)
     assert svc.cmd_db({}, ["pg", "select", "1"]) == 0
-    assert runs == [("select 1", True)]
+    assert runs == [("select 1", None)]  # db_run's default: read-only on every access but write
     for sql in ("\\! id", "  \\copy t to x"):
         with pytest.raises(SystemExit, match="meta-commands"):
             svc.cmd_db({}, ["pg", sql])
 
 
-def test_db_reads_on_write_databases_run_read_write(monkeypatch):
-    """write: a SELECT with a side effect (setval, nextval, a function) runs – read and confirm keep the read-only session (#97)"""
+@pytest.mark.parametrize("access, ro", [("read", True), ("confirm", True), ("write", False), ("rw", False), (None, True)])
+def test_db_run_session_is_read_only_unless_write(monkeypatch, access, ro):
+    """one rule for every caller that doesn't pass ro (a read, tables, describe) – a write passes ro=False itself"""
+    seen = []
+    monkeypatch.setattr(svc, "tunnel", lambda host, port: ("127.0.0.1", 5432))
+    monkeypatch.setattr(svc, "runner", lambda service, env=None: {"env": env})
+    monkeypatch.setattr("subprocess.call", lambda cmd, **kw: seen.append(kw["env"].get("PGOPTIONS")) or 0)
+    db = {"engine": "postgres", "host": "db", "database": "d", "user": "u", "password": "p"}
+    if access:
+        db["access"] = access
+    svc.db_run("pg", db, "select 1")
+    svc.db_run("pg", db, "select 1", ro=False)
+    assert seen == [("-c default_transaction_read_only=on" if ro else None), None]
+
+
+@pytest.mark.parametrize("sql, writes", [
+    ("SELECT setval('my_seq', 5)", True), ("select nextval('s')", True), ("select * into t2 from t", True),
+    ("select * from t for update", True), ("select get_lock('x', 1)", True), ("select pg_terminate_backend(42)", True),
+    ("with x as (select 1) select nextval('s')", True),
+    ("select 'into setval(' from t", False), ("select my_function()", False), ("select intolerance from t", False),
+])
+def test_sql_writes_knows_reads_that_write(sql, writes):
+    """SELECT … INTO, row locks and functions with a side effect are writes: approval on confirm, guarded() on write (#97)"""
+    assert svc.sql_writes(sql) is writes
+
+
+def test_db_reads_that_write_go_through_guarded(monkeypatch):
+    """write: setval() is guarded and runs read-write, a plain read runs read-write unguarded (a function of the database's
+    own may write); confirm asks for approval; read keeps the read-only session, so the server refuses it (#97)"""
     runs, writes = [], []
     access = {"v": "write"}
     monkeypatch.setattr(svc, "get_part", lambda services, name, part: {"engine": "postgres", "access": access["v"]})
     monkeypatch.setattr(svc, "db_run", lambda name, db, sql=None, fmt="table", interactive=False, ro=None: runs.append((sql, ro)) or 0)
-    monkeypatch.setattr(svc, "guarded", lambda name, part, mode, action, run, **kw: writes.append(action) or 0)
+    monkeypatch.setattr(svc, "guarded", lambda name, part, mode, action, run, **kw: writes.append((mode, action)) or run())
     assert svc.cmd_db({}, ["pg", "SELECT setval('my_seq', 5)"]) == 0
-    assert runs == [("SELECT setval('my_seq', 5)", False)] and writes == []
-    assert svc.cmd_db({}, ["pg", "delete from t"]) == 0 and writes == ["SQL: delete from t"]
-    for mode in ("read", "confirm"):
-        access["v"], runs[:] = mode, []
-        assert svc.cmd_db({}, ["pg", "SELECT setval('my_seq', 5)"]) == 0 and runs == [("SELECT setval('my_seq', 5)", True)]
+    assert writes == [("write", "SQL: SELECT setval('my_seq', 5)")] and runs == [("SELECT setval('my_seq', 5)", False)]
+    writes[:], runs[:] = [], []
+    assert svc.cmd_db({}, ["pg", "select my_function()"]) == 0 and writes == [] and runs == [("select my_function()", None)]
+    access["v"], runs[:] = "confirm", []
+    assert svc.cmd_db({}, ["pg", "select nextval('s')"]) == 0 and writes == [("confirm", "SQL: select nextval('s')")]
+    access["v"], writes[:], runs[:] = "read", [], []
+    assert svc.cmd_db({}, ["pg", "select nextval('s')"]) == 0 and writes == [] and runs == [("select nextval('s')", None)]
+
 
 @pytest.mark.parametrize("args, compose, ok", [
     (["ps"], False, True), (["-l", "info", "ps"], False, True), (["--log-level=info", "logs", "x"], False, True),

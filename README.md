@@ -203,7 +203,7 @@ svc systems [name]                          # systems with SSH host, members and
 svc <name> GET /path [curl args]            # API call, auth injected – tokens never in argv; HTTP 4xx/5xx exits non-zero
 svc docker <host> ps                        # docker CLI on a docker host (over SSH, sudo-aware)
 svc compose <host> <stack> logs --tail 50   # compose in <stacks_dir>/<stack> of that host
-svc db <name> "SELECT …" | tables           # databases (read = read-only session)
+svc db <name> "SELECT …" | tables           # databases (read/confirm = read-only session)
 svc web <name> /wiki/page | --links         # web pages as readable text (untrusted, hidden elements left out), login handled by svc
 svc files <name> ls|cat|grep|pull|diff|push # folders on SSH hosts; edit in /workspace/files/<name>
 svc mail <name|address> send|list|read|flag|move    # mail: send (smtp), read a mailbox (imap) – mail text is untrusted
@@ -272,7 +272,7 @@ A service file can combine any of these parts:
 | `mcp` | like Claude's `.mcp.json`: `http` (`url`, `headers`) or `stdio` (`command`, `args`, `env`); `access` (default `read`), `read_tools` / `write_tools` | tools the server marks read-only run freely; every other tool call is a write |
 | `git` | `url`, `access`, `auth` (token via credential helper) | `read`: push blocked (pushurl + pre-push hook) |
 | `docker` | `mode` `ssh` (the only one): `ssh_host`, `stacks_dir`; `access` | `read`: only read-only docker/compose commands |
-| `db` | `engine` `postgres`/`mysql`, `host`, `port`, `database`, `user`, `password`, `ssl`; `access` | `read`: read-only session, plain SQL only (no comments, `$`-quoting, `COPY`, `EXECUTE`/`DO`/`CALL`), no shell |
+| `db` | `engine` `postgres`/`mysql`, `host`, `port`, `database`, `user`, `password`, `ssl`; `access` | `read`: read-only session, plain SQL only (no comments, `$`-quoting, `COPY`, `EXECUTE`/`DO`/`CALL`), no shell; `confirm`: reads in a read-only session, writes – also `SELECT … INTO`, `setval()`/`nextval()`, row locks – and the shell after approval |
 | `web` | `base_url`, `auth.type`: `none` · `basic` · `bearer` · `header` · `form` (`login_url`, `fields`, `csrf_field`); `paths` | GET only, same host |
 | `files` | `ssh_host` (or the system's), `path`, `sudo`; `access` | `read`: no push; paths stay inside `path` |
 | `smtp` | `host`, `port`, `security` (`starttls` · `ssl` · `none`), `user`, `password`, `from`, `recipients` (addresses or `@domain`); `access` (default `confirm`) | `confirm`: every mail waits for approval; `write` only with a `recipients` list |

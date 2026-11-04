@@ -181,7 +181,7 @@
       <p>PostgreSQL and MySQL/MariaDB with a direct connection (templates “PostgreSQL database”, “MySQL / MariaDB database”). User and password come from <code>.env</code>; svc passes them only via environment or a 0600 file, never on the command line.</p>
       <pre class="rc">"db": {"engine": "postgres", "host": "db.lan", "port": 5432, "database": "app",
        "user": "${APP_DB_USER}", "password": "${APP_DB_PASSWORD}", "ssl": "prefer", "access": "read"}</pre>
-      <p>Claude: <code>svc db &lt;name&gt; "&lt;SQL&gt;"</code>, <code>tables</code>, <code>describe &lt;table&gt;</code>, <code>--csv</code>; <code>shell</code> only for <code>write</code>. With <code>read</code> the session is read-only and statements that would switch it to read-write are refused – the real protection is still a read-only database user (see the template's setup hint).</p>
+      <p>Claude: <code>svc db &lt;name&gt; "&lt;SQL&gt;"</code>, <code>tables</code>, <code>describe &lt;table&gt;</code>, <code>--csv</code>; <code>shell</code> on <code>write</code>, on <code>confirm</code> after approval, never on <code>read</code>. With <code>read</code> and <code>confirm</code> a read runs in a read-only session; a read that writes (<code>SELECT … INTO</code>, <code>setval()</code>/<code>nextval()</code>, <code>FOR UPDATE</code>) counts as a write – approval on <code>confirm</code>, refused on <code>read</code>. With <code>read</code> statements that would switch the session to read-write are refused – the real protection is still a read-only database user (see the template's setup hint).</p>
     </section>
 
     <section class="card" id="web">

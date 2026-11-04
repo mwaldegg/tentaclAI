@@ -10,7 +10,10 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - **`svc db` on `write` databases: a `SELECT` with a side effect runs again** – since v0.24.0 every read ran in a
   read-only session, so `SELECT setval(…)`, `nextval(…)` or a function that writes failed with *cannot execute … in a
   read-only transaction* even where writes are allowed. The read-only session is for `read` and `confirm` databases
-  only, as announced; `write` reads run as before v0.24.0 (#97).
+  only, as announced (#97). Reads that write – `SELECT … INTO`, row locks (`FOR UPDATE`/`FOR SHARE`), `setval()`,
+  `nextval()`, `pg_terminate_backend()`, large-object and lock functions and the like – now count as writes:
+  `guarded()` and audited as a write on `write`, approval on `confirm` (before, they failed there), refused on `read`.
+  `tables` and `describe` run in a read-only session on `confirm` databases too.
 
 ### Upgrade
 - `git pull`, `docker compose build`, `docker compose up -d` – tentacontrol and the sandbox (`svc`) change:

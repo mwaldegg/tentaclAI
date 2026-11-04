@@ -55,9 +55,10 @@ def db_engine(db):
 
 
 def db_run(name, db, sql=None, fmt="table", interactive=False, ro=None):
-    """run SQL (or an interactive client) – password only in env / a 0600 tmpfs file; ro (default: access read) makes
-    the session read-only, so a write hidden in a read (SELECT … INTO, a function) fails there"""
-    ro = gate.access_mode(db) == "read" if ro is None else ro
+    """run SQL (or an interactive client) – password only in env / a 0600 tmpfs file; ro (default: every access but
+    write – a write runs through guarded() with ro=False) makes the session read-only, so a write hidden in a read
+    (a function of the database's own) fails there"""
+    ro = gate.access_mode(db) != "write" if ro is None else ro
     if db_engine(db) == "postgres":
         addr, lport = core.tunnel(db.get("host", ""), db.get("port", 5432))
         env = dict(PGHOST=str(db.get("host", "")), PGHOSTADDR=addr, PGPORT=str(lport),
@@ -115,7 +116,7 @@ def cmd_db(services, args):
     if rest[0] == "shell":
         if mode == "read":
             sys.exit(f"svc: {name} is read-only – use svc db {name} \"<SQL>\" (the shell could switch the session to read-write)")
-        return gate.guarded(name, "db", mode, "interactive SQL shell", lambda: db_run(name, db, interactive=True), interactive=True)
+        return gate.guarded(name, "db", mode, "interactive SQL shell", lambda: db_run(name, db, interactive=True, ro=False), interactive=True)
     if rest[0] == "tables":
         return db_run(name, db, "\\dt+" if pg else "SHOW FULL TABLES", fmt)
     if rest[0] == "describe" and len(rest) == 2:
@@ -127,12 +128,13 @@ def cmd_db(services, args):
     if pg and sql.lstrip().startswith("\\"):  # psql would run it as a meta-command (\! runs a shell)
         sys.exit(f"svc: psql meta-commands are not allowed – svc db {name} tables | describe <table>, or plain SQL")
     # SQL a read-only session can't be trusted with is a write: approval on confirm, refused on read
-    if mode != "read" and (sql_writes(sql, pg) or ro_bypass(sql, pg)):
-        return gate.guarded(name, "db", mode, f"SQL: {sql}", lambda: db_run(name, db, sql, fmt))
-    if ro_bypass(sql, pg):
+    bypass = ro_bypass(sql, pg)
+    if mode != "read" and (bypass or sql_writes(sql, pg)):
+        return gate.guarded(name, "db", mode, f"SQL: {sql}", lambda: db_run(name, db, sql, fmt, ro=False))
+    if bypass:
         sys.exit(f"svc: {name} is read-only – no comments, backslashes, $ or U& quoting, EXECUTE/DO/CALL/set_config, COPY "
                  f"or file functions, and nothing that changes the transaction mode")
-    return db_run(name, db, sql, fmt, ro=mode != "write")  # write: a SELECT may call a function that writes (setval)
+    return db_run(name, db, sql, fmt)  # write: read-write – a function of the database's own may write
 
 
 def db_test(name, db):
@@ -204,8 +206,9 @@ def sql_writes(sql, pg=True):
 
 
 def _statement_writes(s):
+    side = safeguards.SIDE_SQL.search(re.sub(r"'(?:[^']|'')*'", "''", s))  # outside '…' literals: SELECT … INTO, setval()
     if safeguards.READ_SQL.match(s) and not (s.lower().startswith(("explain analyze",)) and safeguards.WRITE_SQL.search(s)):
-        return False
+        return bool(side)
     if re.match(r"^\s*with\b", s, re.I):
-        return bool(safeguards.WRITE_SQL.search(s))
+        return bool(safeguards.WRITE_SQL.search(s) or side)
     return True
