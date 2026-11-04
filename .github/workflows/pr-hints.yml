@@ -1,0 +1,60 @@
+name: pr-hints
+
+# A friendly comment on pull requests: is there a test, is CHANGELOG.md left alone (the changelog line goes into the
+# PR description, or the maintainers write it). pull_request_target so it can comment on PRs from forks – it never
+# checks out or runs the PR's code, it only reads the file list and the description through the API.
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  hints:
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'simplify/') && github.actor != 'dependabot[bot]' }}
+    steps:
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' > files.txt
+          gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' > body.txt
+          python3 - <<'PY' > comment.md
+          import os, re
+          files = open("files.txt").read().split()
+          body = open("body.txt").read()
+          docs = re.compile(r"(^docs/|^\.github/|\.md$|^LICENSE)")
+          code = [f for f in files if not docs.search(f)]
+          tests = [f for f in files if f.startswith("tests/") or f == "scripts/test-sandbox.sh"]
+          notes = []
+          if code and not tests:
+              notes.append("**A test is missing** – please add one that fails without your change and passes with it. "
+                           f"Where it goes and an example: [CONTRIBUTING.md → Tests](https://github.com/{os.environ['REPO']}/blob/main/CONTRIBUTING.md#tests). "
+                           "Run it with `scripts/test-quick.sh`.")
+          if "CHANGELOG.md" in files:
+              notes.append("**No need to edit `CHANGELOG.md`** – two PRs editing it always collide. Put one line "
+                           "`Changelog: …` into the PR description instead (or leave it out, we write it). "
+                           "Please drop the change to `CHANGELOG.md`.")
+          has_line = re.search(r"^Changelog:[ \t]*\S", body, re.M)
+          print("<!-- tc-pr-hints -->")
+          if notes:
+              print("Thanks for the pull request! Two things make merging quick:\n" if len(notes) > 1
+                    else "Thanks for the pull request! One thing makes merging quick:\n")
+              for n in notes:
+                  print(f"- {n}")
+          else:
+              print("✓ All set – thanks!" + ("" if has_line else
+                    " The changelog entry is written on merge (or add a line `Changelog: …` to the description)."))
+          print("\n<sub>This comment updates itself when you push or edit the description.</sub>")
+          PY
+          id="$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- tc-pr-hints -->"))) | .id' | head -1)"
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@comment.md >/dev/null
+          elif grep -q '^- ' comment.md; then  # all fine from the start: no comment at all
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@comment.md >/dev/null
+          fi

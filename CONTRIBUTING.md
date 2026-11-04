@@ -38,4 +38,36 @@ placeholders for secrets with a descriptive name (`GRAFANA_TOKEN`; a second serv
 ## Pull requests
 
 Small, focused PRs with a short description of *what* and *why*. PRs are squash-merged.
-Changes in behaviour get an entry under **Unreleased** in `CHANGELOG.md` – including upgrade steps if an existing installation needs any.
+
+- **Changelog:** nothing to do. Don't edit `CHANGELOG.md` (two PRs editing it always collide). If you like, put one
+  line into the PR description – it goes into the changelog as written:
+
+  ```
+  Changelog: **SSH → Add host: "This host" works again** – the button did nothing in the browser.
+  Upgrade: `docker compose build control`, `docker compose up -d control`   (only if an installation needs a step)
+  ```
+
+  Without it we write the entry when the PR is merged.
+- **A test** that fails without your change and passes with it. A bot comment on the PR tells you when it's missing.
+
+### Tests
+
+Run `scripts/test-quick.sh` (no Docker, under a minute; a single test: `scripts/test-quick.sh -k <name>`). Put the
+test next to the closest existing one:
+
+| You changed | Test goes to | Typical check |
+|---|---|---|
+| a page or template (`control/app/templates/`, `routes/`) | `tests/test_pages.py` | `client.get("/page").text` contains the right HTML |
+| `svc` (`build/svclib/`) | `tests/test_svc.py` | call `svc.<function>` with `monkeypatch`ed helpers |
+| `lib/tclib.py` | `tests/test_tclib.py` | plain function calls |
+| other tentacontrol code (`control/app/*.py`) | the `tests/test_<module>.py` of that module | |
+
+Example – a template fix (the alias quotes in the *This host* button, #99):
+
+```python
+page = client.get("/ssh/new").text
+assert "f.alias.value=&#34;" in page   # escaped, so the onclick attribute doesn't end early
+```
+
+Security boundaries (svc access modes, the gateway, the entrypoint) also get an end-to-end check in
+`scripts/test-sandbox.sh` – see stage 2 above; if you can't run Docker, say so in the PR and we run it.

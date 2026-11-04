@@ -131,7 +131,7 @@ Release with **`scripts/release.sh X.Y.Z "subtitle"`** (`--dry-run` first if uns
 and up to date and `## Unreleased` has an `### Upgrade` part, runs the **mandatory** tests – `scripts/test-quick.sh` and
 the **full** `scripts/test-sandbox.sh` (fresh images and state, a kept REUSE stack is removed), pushes main and waits for
 the GitHub `checks` workflow of that commit to be green – and only then renames the section, sets `VERSION`, commits,
-tags, pushes and creates the GitHub release from the same notes. Test the upgrade path from the previous release in an isolated instance when the Upgrade section is more than a
+tags, opens a new empty `## Unreleased` section (own commit), pushes and creates the GitHub release from the same notes. Test the upgrade path from the previous release in an isolated instance when the Upgrade section is more than a
 plain rebuild.
 
 ## Brand images

@@ -2,7 +2,7 @@
 # Release tentaclAI: checks, stage 1 + full stage 3 tests, CHANGELOG/VERSION, commit, tag, push, GitHub release.
 #   scripts/release.sh 0.9.1 "subtitle"        release v0.9.1 named "v0.9.1 – subtitle"
 #   scripts/release.sh --dry-run 0.9.1 "…"     checks and tests only, changes nothing
-# Needs: the "## Unreleased" section in CHANGELOG.md (with an "### Upgrade" part), a clean working tree on main that is
+# Needs: the "## Unreleased" section in CHANGELOG.md (entries, and an "### Upgrade" part with steps), a clean working tree on main that is
 # not behind origin, and a GitHub token with contents:write – GH_TOKEN from the environment or the stack's .env (never
 # printed, handed to git through a credential helper). Extra commit trailers: RELEASE_TRAILERS="Co-Authored-By: …".
 # Before the release commit, main is pushed (if needed) and the GitHub "checks" workflow of that commit must be green –
@@ -32,8 +32,9 @@ CUR="$(cat VERSION)"
 [ "$(printf '%s\n%s\n' "$CUR" "$VER" | sort -V | tail -1)" = "$VER" ] && [ "$CUR" != "$VER" ] || die "$VER is not newer than $CUR"
 grep -q '^## Unreleased$' CHANGELOG.md || die "CHANGELOG.md has no '## Unreleased' section"
 NOTES="$(awk '/^## Unreleased$/{f=1;next} /^## v[0-9]/{f=0} f' CHANGELOG.md)"
-[ -n "$(echo "$NOTES" | tr -d '[:space:]')" ] || die "the Unreleased section is empty"
-echo "$NOTES" | grep -q '^### Upgrade' || die "the Unreleased section has no '### Upgrade' part (mandatory)"
+echo "$NOTES" | grep -q '^- ' || die "the Unreleased section is empty"
+echo "$NOTES" | awk '/^### Upgrade/{f=1;next} /^### /{f=0} f' | grep -q '^- ' \
+    || die "the Unreleased section has no '### Upgrade' part with steps (mandatory)"
 if [ -z "${GH_TOKEN:-}" ]; then
     GH_TOKEN="$(python3 -c 'import sys; sys.path.insert(0, "lib"); import tclib; print(tclib.read_env(".env").get("GH_TOKEN", ""))')"
 fi
@@ -90,6 +91,14 @@ ${RELEASE_TRAILERS:+
 $RELEASE_TRAILERS}
 EOF
 git tag -a "v$VER" -m "v$VER"
+# an empty Unreleased section for what comes next – the code review job and maintainers always find where entries go
+sed -i "0,/^## v$VER – /s//## Unreleased\n\n### Changes \/ fixes\n\n### Upgrade\n\n&/" CHANGELOG.md
+git add CHANGELOG.md
+git commit -q -F - <<EOF
+CHANGELOG: open the Unreleased section after v$VER
+${RELEASE_TRAILERS:+
+$RELEASE_TRAILERS}
+EOF
 git_auth push -q origin main "v$VER"
 
 step "GitHub release"
