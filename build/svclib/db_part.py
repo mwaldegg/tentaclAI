@@ -132,7 +132,7 @@ def cmd_db(services, args):
     if ro_bypass(sql, pg):
         sys.exit(f"svc: {name} is read-only – no comments, backslashes, $ or U& quoting, EXECUTE/DO/CALL/set_config, COPY "
                  f"or file functions, and nothing that changes the transaction mode")
-    return db_run(name, db, sql, fmt, ro=True)
+    return db_run(name, db, sql, fmt, ro=mode != "write")  # write: a SELECT may call a function that writes (setval)
 
 
 def db_test(name, db):

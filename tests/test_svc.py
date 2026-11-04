@@ -1122,6 +1122,20 @@ def test_db_reads_without_approval_run_read_only_and_no_psql_meta_commands(monke
             svc.cmd_db({}, ["pg", sql])
 
 
+def test_db_reads_on_write_databases_run_read_write(monkeypatch):
+    """write: a SELECT with a side effect (setval, nextval, a function) runs – read and confirm keep the read-only session (#97)"""
+    runs, writes = [], []
+    access = {"v": "write"}
+    monkeypatch.setattr(svc, "get_part", lambda services, name, part: {"engine": "postgres", "access": access["v"]})
+    monkeypatch.setattr(svc, "db_run", lambda name, db, sql=None, fmt="table", interactive=False, ro=None: runs.append((sql, ro)) or 0)
+    monkeypatch.setattr(svc, "guarded", lambda name, part, mode, action, run, **kw: writes.append(action) or 0)
+    assert svc.cmd_db({}, ["pg", "SELECT setval('my_seq', 5)"]) == 0
+    assert runs == [("SELECT setval('my_seq', 5)", False)] and writes == []
+    assert svc.cmd_db({}, ["pg", "delete from t"]) == 0 and writes == ["SQL: delete from t"]
+    for mode in ("read", "confirm"):
+        access["v"], runs[:] = mode, []
+        assert svc.cmd_db({}, ["pg", "SELECT setval('my_seq', 5)"]) == 0 and runs == [("SELECT setval('my_seq', 5)", True)]
+
 @pytest.mark.parametrize("args, compose, ok", [
     (["ps"], False, True), (["-l", "info", "ps"], False, True), (["--log-level=info", "logs", "x"], False, True),
     (["--version"], False, True), (["network", "ls"], False, True),

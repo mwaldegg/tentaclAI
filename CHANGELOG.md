@@ -7,9 +7,14 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ### Changes / fixes
 - **SSH → Add host: "This host" works again** – the button did nothing (`Unexpected end of input` in the browser
   console): the alias in its `onclick` broke the attribute's double quotes. Thanks @dashorty (#99, #100).
+- **`svc db` on `write` databases: a `SELECT` with a side effect runs again** – since v0.24.0 every read ran in a
+  read-only session, so `SELECT setval(…)`, `nextval(…)` or a function that writes failed with *cannot execute … in a
+  read-only transaction* even where writes are allowed. The read-only session is for `read` and `confirm` databases
+  only, as announced; `write` reads run as before v0.24.0 (#97).
 
 ### Upgrade
-- `git pull`, `docker compose build control`, `docker compose up -d control` – only tentacontrol changes.
+- `git pull`, `docker compose build`, `docker compose up -d` – tentacontrol and the sandbox (`svc`) change:
+  recreating `tentaclai` ends running sessions and Remote Control.
 
 ## v0.24.0 – 2026-11-03
 
