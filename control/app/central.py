@@ -654,19 +654,14 @@ def _modules(prof, allowed, applied, drift):
     mods = prof.get("modules") or {}
     if not mods or "modules" not in allowed:
         return []
-    out, found = [], {}  # found: installed packages and available modules, looked up once – again after an install
-
-    def lookup():
-        if not found:
-            found.update(versions=packages.installed_versions(), origins={e["name"]: e["origin"] for e in extensions.available()})
-        return found
+    out, origins = [], {}  # origins: the available modules (verifies every package) – looked up once when needed, again after an install
     for name, m in mods.items():
         m = m or {}
         rid = f"modules:{name}"
         try:
             pkg = m.get("package")
             if pkg:
-                have = lookup()["versions"].get(name)
+                have = packages.installed_versions().get(name)
                 if have != pkg.get("version"):
                     data = _call("GET", f"/packages/{name}/{pkg['version']}", raw=True)
                     if pkg.get("sha256") and hashlib.sha256(data).hexdigest() != pkg["sha256"]:
@@ -676,12 +671,13 @@ def _modules(prof, allowed, applied, drift):
                         raise CentralError(f"the server sent {got['name']} {got['version']}, the profile names {name} {pkg.get('version')}")
                     with applying():
                         info = packages.install(data)  # signed by tentaclAI only (allow_unsigned is False)
-                    found.clear()
+                    origins = {}
                     out.append({"id": rid, "result": "applied", "msg": f"package {info['version']} installed – restart tentacontrol"})
             want = m.get("enabled")
-            kind = lookup()["origins"].get(name, "")
-            if want and kind == "local" and name not in extensions.enabled():  # third-party code (local/extensions, unsigned package): on only by the admin here
-                raise ValueError(f"{name} is a local module – the server can switch it off, not on")
+            if want and name not in extensions.enabled():
+                origins = origins or {e["name"]: e["origin"] for e in extensions.available()}
+                if origins.get(name) == "local":  # third-party code (local/extensions, unsigned package): on only by the admin here
+                    raise ValueError(f"{name} is a local module – the server can switch it off, not on")
             if want is not None and extensions.origin(name) not in ("configured", "signed"):
                 on = name in extensions.enabled()
                 if on != bool(want) and (m.get("mode", "enforced") == "enforced" or rid not in applied):

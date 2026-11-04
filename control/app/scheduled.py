@@ -13,6 +13,7 @@ State: jobs.json (definitions), job-history.json (last runs), job-runs.json (run
 """
 import asyncio
 import difflib
+import functools
 import json
 import os
 import re
@@ -40,10 +41,10 @@ _state = threading.RLock()  # read-modify-write of JOBS, HISTORY and ACTIVE: the
 
 
 def _locked(fn):
+    @functools.wraps(fn)
     def wrapper(*a, **kw):
         with _state:
             return fn(*a, **kw)
-    wrapper.__name__, wrapper.__doc__, wrapper.__wrapped__ = fn.__name__, fn.__doc__, fn
     return wrapper
 KEEP_RUNS = 300
 CATCH_UP = 6 * 3600          # a run missed while tentaclAI was down is made up for if it is at most this old
@@ -641,15 +642,10 @@ def set_group(jid, group):
     return g
 
 
-def order_key(job):
-    """a job's place in its group: its position (set with the arrows on the Jobs page), then the name"""
-    return (job.get("order") is None, job.get("order") or 0, job.get("name", "").lower())
-
-
 def in_group(group, jobs=None):
     """the ids of a group's jobs in their order – the order "Run the group" follows"""
     jobs = load() if jobs is None else jobs
-    return [k for k, j in sorted(jobs.items(), key=lambda kv: order_key(kv[1])) if (j.get("group") or "") == group]
+    return [k for k, j in sorted(jobs.items(), key=lambda kv: tclib.order_key(kv[1])) if (j.get("group") or "") == group]
 
 
 @_locked
@@ -682,8 +678,7 @@ def tabs(rows):
         mine = [r for r in rows if (r.get("group") or "") == g]
         lights = [_light(r["last_run"]) for r in mine if r.get("last_run")]
         worst = "alert" if "alert" in lights else "warn" if "warn" in lights else ""
-        waiting = sum(open_proposals(x) for r in mine for x in r.get("runs") or [])
-        out.append((g, len(mine), worst, lights.count(worst) if worst else 0, waiting))
+        out.append((g, len(mine), worst, lights.count(worst) if worst else 0, sum(waiting(r.get("runs")) for r in mine)))
     return out
 
 
@@ -1336,7 +1331,8 @@ def unseen():
 def state_token():
     """changes whenever a run is queued, starts, ends – or a job is added, edited, paused"""
     import hashlib
-    h = [r for r in _history_view()[:-50] if open_proposals(r)] + _history_view()[-50:]  # older ones a card still shows
+    view = _history_view()
+    h = [r for r in view[:-50] if open_proposals(r)] + view[-50:]  # older ones a card still shows
     raw = json.dumps([(r.get("id"), r.get("status"), [x.get("state") for x in (r.get("actions") or []) + (r.get("knowledge") or [])],
                        (r.get("prompt_suggestion") or {}).get("state")) for r in h]) \
         + str(os.path.getmtime(JOBS) if os.path.exists(JOBS) else 0)
@@ -1349,6 +1345,11 @@ def open_proposals(run, now=None):
     acts = sum(1 for x in run.get("actions") or [] if x.get("state") == "proposed") if run.get("actions_until", 0) > now else 0
     learned = sum(1 for x in run.get("knowledge") or [] if x.get("state") == "proposed")
     return acts + learned + int((run.get("prompt_suggestion") or {}).get("state") == "proposed")
+
+
+def waiting(runs):
+    """how many proposals of these runs are still to pick"""
+    return sum(open_proposals(r) for r in runs or [])
 
 
 def pending_proposals():
@@ -1535,7 +1536,7 @@ def overview():
     h = history()
     known = tentacles()
     rows = []
-    for jid, job in sorted(load().items(), key=lambda kv: ((kv[1].get("group") or "") == "", (kv[1].get("group") or "").lower(), order_key(kv[1]))):
+    for jid, job in sorted(load().items(), key=lambda kv: ((kv[1].get("group") or "") == "", (kv[1].get("group") or "").lower(), tclib.order_key(kv[1]))):
         runs = [r for r in h if r.get("job") == jid]
         writes, asks = reach(job, known)
         unknown = [n for n in mentions(job.get("prompt")) if n not in known]  # renamed or removed since

@@ -53,18 +53,14 @@ def add(kind, entry):
         if any(tclib.egress_match(p, host.lstrip("*."), int(port or 443)) for p in default_list()):
             raise ValueError(f"{e} is on the built-in list (Claude Code itself) and can't be blocked")
     with jsonstore.locked(RULES):
-        _add(kind, e)
+        r = rules()
+        other = "block" if kind == "allow" else "allow"
+        host = e.rsplit(":", 1)[0] if ":" in e else e
+        r[other] = [x for x in r[other] if x not in (e, host)]  # an entry lives in one list only (host:port or the plain host)
+        if e not in r[kind]:
+            r[kind].append(e)
+        _save(r)
     return e
-
-
-def _add(kind, e):
-    r = rules()
-    other = "block" if kind == "allow" else "allow"
-    host = e.rsplit(":", 1)[0] if ":" in e else e
-    r[other] = [x for x in r[other] if x not in (e, host)]  # an entry lives in one list only (host:port or the plain host)
-    if e not in r[kind]:
-        r[kind].append(e)
-    _save(r)
 
 
 def remove(kind, entry):

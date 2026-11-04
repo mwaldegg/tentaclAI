@@ -205,6 +205,11 @@ def schedule_text(sched):
     return "?"
 
 
+def order_key(job):
+    """a job's place in its group: its position (set with the arrows on the Jobs page), then the name"""
+    return (job.get("order") is None, job.get("order") or 0, job.get("name", "").lower())
+
+
 MAIL_ADDRESS = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\Z")
 
 
