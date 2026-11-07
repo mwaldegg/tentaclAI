@@ -74,6 +74,13 @@ def test_read_only_profile_is_locked_down(sj):
     assert json.loads(argv[argv.index("--json-schema") + 1])["properties"]["status"]["enum"] == ["ok", "warn", "alert"]
 
 
+def test_jobs_are_told_forked_skills_lose_their_result(sj):
+    """#101: a forked skill (/code-review) took the job's StructuredOutput – the job got only "Skill execution completed" """
+    argv = sj.claude_argv({"name": "x", "prompt": "run /code-review", "profile": "standard"}, "r", "s")
+    system = argv[argv.index("--append-system-prompt") + 1]
+    assert "runs forked" in system and "do that work yourself" in system
+
+
 def test_standard_profile(sj):
     argv = sj.claude_argv({"name": "x", "prompt": "p", "profile": "standard", "model": "haiku"}, "run1", "sid")
     assert argv[argv.index("--permission-mode") + 1] == "bypassPermissions" and "--allowedTools" not in argv

@@ -5,6 +5,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **Jobs: a forked skill no longer swallows the review** – a job that ran `/code-review` got back only *Skill
+  execution completed* and no findings: the skill runs forked and its fork took the job's final-answer tool
+  (`StructuredOutput`). Jobs are now told to do such work themselves (subagents are fine) (#101).
 - **SSH → Add host: "This host" works again** – the button did nothing (`Unexpected end of input` in the browser
   console): the alias in its `onclick` broke the attribute's double quotes. Thanks @dashorty (#99, #100).
 - **`svc db` on `write` databases: a `SELECT` with a side effect runs again** – since v0.24.0 every read ran in a

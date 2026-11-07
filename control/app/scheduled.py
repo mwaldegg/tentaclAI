@@ -150,7 +150,9 @@ SYSTEM = ("This is an unattended scheduled job of tentaclAI named {name!r}; nobo
           "questions – decide on your own, keep it short. Your final answer is the JSON object of the given schema: "
           "status ok (nothing to do), warn (needs attention soon) or alert (act now), a one-line title, a summary of at "
           "most three sentences, optional details. If an action waits for an approval that doesn't come, say so in "
-          "the summary.{ro}")
+          "the summary. A skill that runs forked (in a context of its own, such as /code-review) can't hand back its "
+          "result in a job – the fork takes the final-answer tool and returns only \"Skill execution completed\": do "
+          "that work yourself instead (subagents through the Agent tool are fine).{ro}")
 SYSTEM_RO = (" This run is read-only: tentacles can only be read, files in the sandbox can't be edited – report what "
              "should be done instead of trying it. Bash allows only svc and these text tools (also in pipes and chains): {helpers}.")
 SYSTEM_SLEEP = (" Don't wait for external state (CI, deploys): Claude Code blocks a longer sleep, also chained with a "
