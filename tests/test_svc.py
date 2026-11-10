@@ -50,6 +50,12 @@ def _unprivileged(monkeypatch):
     monkeypatch.setattr(svc, "privileged", lambda: False)
 
 
+@pytest.fixture(autouse=True)
+def _not_a_job(monkeypatch):
+    """the tests may run inside a scheduled job, whose read-only marker makes every part read (tests of a job set _job)"""
+    monkeypatch.setattr(svc, "_job", {})
+
+
 def test_svc_proxy_survives_monkeypatch_undo():
     """undo restores the module's value instead of deleting it (pytest >= 9.2 reads the old value from __dict__)"""
     mp = pytest.MonkeyPatch()
