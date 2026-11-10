@@ -53,6 +53,11 @@ def cmd_call(services, name, method, path, extra):
             cmd.append("-k")
         if fail_on_http_error(extra):
             cmd.append("--fail-with-body")
+        unreadable = [f for f in curl_read_files(extra) if subprocess.call(["test", "-r", f], **core.runner(name))]
+        if unreadable:  # curl would only warn and send the request without that body – after the approval
+            sys.exit(f"svc: {unreadable[0]} is not readable by the user curl runs as ({core.run_user(name)}) – pass the "
+                     "body inline (--data-binary \"$(cat file)\") or make the file readable for everyone (chmod a+r, "
+                     "in a directory others may enter)")
         if method.upper() in ("GET", "HEAD", "OPTIONS"):
             rc = safeguards.scanned("API response", name, "api", f"{method.upper()} {path}", cmd + list(extra), **core.runner(name))
         else:
@@ -131,6 +136,38 @@ def curl_args_error(path, extra):
             return "a header contains a control character"
         i += 1
     return None
+
+
+def curl_read_files(extra):
+    """the local files curl reads for the request (-d @file, --json @file, --data-urlencode name@file, -F name=@file or
+    name=<file, -T file, -H @file) – stdin (-) aside; extra has passed curl_args_error"""
+    files, i = [], 0
+    while i < len(extra):
+        a, value = extra[i], None
+        if a in CURL_VALUES or a in CURL_LONG_VALUES or a in CURL_VALUES.values():
+            i += 1
+            a, value = CURL_VALUES.get(a, a), extra[i]
+        elif a.startswith("-") and not a.startswith("--"):
+            j = next((j for j, c in enumerate(a[1:], 1) if "-" + c in CURL_VALUES), None)
+            if j is not None:
+                value = a[j + 1:]
+                if not value:
+                    i += 1
+                    value = extra[i]
+                a = CURL_VALUES["-" + a[j]]
+        i += 1
+        f = None
+        if a in ("--data", "--data-binary", "--json", "--header") and value.startswith("@"):
+            f = value[1:]
+        elif a == "--data-urlencode" and "@" in value.split("=", 1)[0]:
+            f = value.split("@", 1)[1]
+        elif a == "--form" and value.split("=", 1)[-1][:1] in ("@", "<"):
+            f = value.split("=", 1)[-1][1:].split(";", 1)[0]
+        elif a == "--upload-file":
+            f = value
+        if f and f != "-":
+            files.append(f)
+    return files
 
 
 def fail_on_http_error(extra):
