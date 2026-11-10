@@ -5,6 +5,14 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **svc API: a body file curl can't read stops before the approval** – `--data-binary @file` from a private directory
+  went out with an empty body after the approval; svc now checks the file as the curl user first and says what to do
+  (#103).
+- **svc docker / compose: `-e`/`--env` values stay out of the audit log** – a token handed to a container with
+  `-e NAME=value` was logged (and shown on the approval) in plain text; the values are now blanked, the command runs
+  unchanged (#105).
+- **pr-hints: a title edit no longer swallows the hint comment** – a run whose job is skipped cancelled the hint run of
+  the same PR (#102).
 - **Jobs: a forked skill no longer swallows the review** – a job that ran `/code-review` got back only *Skill
   execution completed* and no findings: the skill runs forked and its fork took the job's final-answer tool
   (`StructuredOutput`). Jobs are now told to do such work themselves (subagents are fine) (#101).
