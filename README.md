@@ -469,6 +469,8 @@ What tentaclAI does:
   `systemctl show|cat` – free reads that would print container environments, interpolated `.env` values or unit
   `Environment=` lines – run through `svc` with values of secret-looking names (password, token, key, secret, auth …)
   and passwords in URLs replaced by `[redacted by svc]`. Logs and anything you approve explicitly are not filtered.
+  Values passed with `-e`/`--env NAME=value` to `svc docker`/`svc compose` are blanked the same way in the audit log
+  and the approval, whatever the name.
 
 What it does **not** (yet) do – keep it in mind:
 

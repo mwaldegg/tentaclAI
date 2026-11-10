@@ -112,14 +112,14 @@ def cmd_docker(services, args):
     run = lambda: call(docker_argv(name, d, rest))  # noqa: E731
     if _ro_allowed(rest):
         return run()
-    return gate.guarded(name, "docker", gate.access_mode(d), "docker " + shlex.join(rest), run, interactive=wants_tty(rest))
+    return gate.guarded(name, "docker", gate.access_mode(d), "docker " + shlex.join(safeguards.env_redacted(rest)), run, interactive=wants_tty(rest))
 
 
 def cmd_compose(services, name, stack, rest):
     d = get_docker(services, name)
     if _ro_allowed(rest, compose=True):
         return _compose(name, d, stack, rest)
-    return gate.guarded(name, "docker", gate.access_mode(d), f"compose {stack} {shlex.join(rest)}",
+    return gate.guarded(name, "docker", gate.access_mode(d), f"compose {stack} {shlex.join(safeguards.env_redacted(rest))}",
                    lambda: _compose(name, d, stack, rest), interactive=wants_tty(rest, compose=True))
 
 

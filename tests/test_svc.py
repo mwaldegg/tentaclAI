@@ -114,6 +114,22 @@ def test_sensitive_read(words, compose, expected):
     assert svc.sensitive_read(words, compose=compose) is expected
 
 
+def test_docker_env_values_stay_out_of_the_audit_log(monkeypatch):
+    """docker exec/run -e NAME=value: the value never reaches the audit log or the approval, whatever the name (#105)"""
+    monkeypatch.setattr(svc, "ssh_sudo", lambda alias: "")
+    services = {"box": {"name": "box", "docker": {"mode": "ssh", "ssh_host": "box", "access": "write"}}}
+    actions, argv = [], []
+    monkeypatch.setattr(svc, "guarded", lambda name, part, mode, action, run, **kw: actions.append(action) or run())
+    monkeypatch.setattr("subprocess.call", lambda cmd, **kw: argv.append(cmd) or 0)
+    svc.cmd_docker(services, ["box", "exec", "-e", "T=s3cret", "--env=X=s3cret", "-eY=s3cret", "-e", "HOME", "c", "true"])
+    assert actions == ["docker exec -e 'T=[redacted by svc]' '--env=X=[redacted by svc]' '-eY=[redacted by svc]' -e HOME c true"]
+    assert argv[0][-1] == "docker exec -e T=s3cret --env=X=s3cret -eY=s3cret -e HOME c true"  # runs with the real values
+    monkeypatch.setattr(svc, "_compose", lambda *a: 0)
+    services["box"]["docker"]["stacks_dir"] = "/srv"
+    svc.cmd_compose(services, "box", "app", ["run", "--env", "A=s3cret", "web"])
+    assert "s3cret" not in actions[1] and "A=[redacted by svc]" in actions[1]
+
+
 def test_env_values_stay_out_of_the_process_environment(tmp_path, monkeypatch):
     """child processes (ssh, docker, compose, git) must not inherit the service tokens from .env"""
     f = tmp_path / ".env"
