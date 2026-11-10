@@ -5,6 +5,13 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **Fewer false prompt-injection alerts** – a job reading the same GitHub issues every night raised the same
+  *Possible prompt injection* each run, often twice. Now a finding (tentacle or tool, reason, excerpt) is flagged and
+  notified once in 30 days – again it is an ordinary entry *seen before: …*, a new finding next to it still alerts; up
+  to three hits per reason are checked so a known one can't hide a new one. svc's own warning in a result (`svc jobs
+  --steps`, a Bash call around `svc`, an issue quoting it) no longer triggers the hook a second time. *Mentions the
+  system prompt* needs a request now (reveal, print, ignore … the system prompt), and `svc db <name>` / `{name}` /
+  `$HOST` placeholders don't count as *asks to run commands*.
 - **Jobs: a forked skill no longer swallows the review** – a job that ran `/code-review` got back only *Skill
   execution completed* and no findings: the skill runs forked and its fork took the job's final-answer tool
   (`StructuredOutput`). Jobs are now told to do such work themselves (subagents are fine) (#101).

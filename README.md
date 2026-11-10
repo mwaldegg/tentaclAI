@@ -451,7 +451,11 @@ What tentaclAI does:
   WebSearch, MCP tools and files Claude reads, PDFs by their text (`pdftotext`; images are skipped) – is checked for
   text that tries to instruct an AI. A finding gives Claude
   a warning next to the content, an entry *flagged* in Approvals and a notification – the same findings in the same
-  content again in one session get a shorter reminder instead of the full warning (in full again after a compact). This is a heuristic: hidden
+  content again in one session get a shorter reminder instead of the full warning (in full again after a compact). The
+  same finding (tentacle or tool, reason, excerpt) is flagged and notified once in 30 days – a job reading the same
+  issues every night gets an ordinary entry *seen before: …*; a new finding next to it is still reported. svc's and the
+  hook's own warning sentences in a result don't count, nor does a mere mention of a system prompt or a command with a
+  placeholder (`svc db <name>`). This is a heuristic: hidden
   injections lose their effect and obvious ones are noticed, a well-disguised one can get through. The hard limits stay
   `read`/`confirm`, no secrets in the sandbox, the egress gateway and mail recipient lists – keep writes of tentacles
   that read mail or the web on `confirm`.
