@@ -3,6 +3,7 @@ import importlib
 import json
 import os
 import pkgutil
+import re
 import subprocess
 import sys
 
@@ -417,6 +418,15 @@ def test_guard_note_keeps_excerpts_without_secrets(monkeypatch, tmp_path):
     body = calls[1][1][2]
     assert body.startswith("Read /workspace/notes.md\n– asks to ignore instructions: line 4:") and "s3cr3t" not in body
     assert body.endswith("long base64 block")
+
+
+def test_guard_sources_are_known_to_the_warning_filter():
+    """tclib drops svc's own warning from a later scan only for the sources it lists"""
+    import glob
+    used = set()
+    for f in glob.glob(os.path.join(ROOT, "build", "svclib", "*.py")):
+        used |= set(re.findall(r'safeguards\.(?:guard|scanned)\("([^"]+)"', open(f).read()))
+    assert used and used <= set(svc.tclib.GUARD_SOURCES), used
 
 
 def test_guard_note_reports_a_finding_once(monkeypatch, tmp_path):  # a job reading the same issues every night
