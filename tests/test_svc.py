@@ -1085,6 +1085,30 @@ def test_api_curl_args_are_an_allowlist(extra, refused):
     assert (err is None) if refused is None else (refused in err), (extra, err)
 
 
+def test_api_curl_read_files():
+    extra = ["-sd@b.json", "--json", "@j", "--data-urlencode", "q@u.txt", "--data-urlencode", "q=a@b", "-F", "f=@up.png;type=image/png",
+             "-F", "t=<t.txt", "-F", "x=y", "-T", "-", "--upload-file", "u", "-H", "@h", "-H", "A: b", "--data-raw", "@raw", "-d", "@-"]
+    assert svc.curl_read_files(extra) == ["b.json", "j", "u.txt", "up.png", "t.txt", "u", "h"]
+
+
+def test_api_unreadable_body_file_stops_before_the_approval(monkeypatch):
+    """curl runs as the service's user: a file it can't read would go out as an empty body after the approval (#103)"""
+    services = {"ha": {"name": "ha", "api": {"base_url": "https://ha.example.com/api", "access": "confirm"}}}
+    monkeypatch.setattr(svc, "require_allowed", lambda name: None)
+    monkeypatch.setattr(svc, "_shm_file", lambda content, service: "/dev/null")
+    monkeypatch.setattr("os.unlink", lambda f: None)
+    monkeypatch.setattr(svc, "runner", lambda service, env=None: {})
+    monkeypatch.setattr(svc, "run_user", lambda service: "tcr-" + service)
+    calls, approvals = [], []
+    monkeypatch.setattr("subprocess.call", lambda cmd, **kw: calls.append(cmd) or int(cmd[:2] == ["test", "-r"] and cmd[2] == "private.json"))
+    monkeypatch.setattr(svc, "guarded", lambda name, part, mode, action, run, **kw: approvals.append(action) or run())
+    with pytest.raises(SystemExit, match="private.json is not readable by the user curl runs as \\(tcr-ha\\)"):
+        svc.cmd_call(services, "ha", "POST", "/x", ["--data-binary", "@private.json"])
+    assert approvals == [] and calls == [["test", "-r", "private.json"]]
+    assert svc.cmd_call(services, "ha", "POST", "/x", ["--data-binary", "@body.json"]) == 0
+    assert approvals == ["POST /x (with body)"] and calls[-1][0] == "curl"
+
+
 def test_api_path_and_config_values_refuse_line_breaks():
     """a line break in a curl config file starts a new option (url = …, then proxy = or header = from Claude)"""
     assert "control character" in svc.curl_args_error("/x\nproxy = http://evil", [])
