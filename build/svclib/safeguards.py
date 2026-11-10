@@ -65,6 +65,20 @@ def sensitive_read(words, compose=False):
     return "inspect" in w
 
 
+def env_redacted(words):
+    """docker/compose words for the audit log and the approval: the values of -e/--env NAME=value blanked (a token
+    handed to a container), whatever the name – the command itself runs with the real words"""
+    out, after_flag = [], False
+    for w in words:
+        if after_flag and "=" in w:
+            w = w.split("=", 1)[0] + "=" + _REDACTED
+        else:
+            w = re.sub(r"(?s)^(--env=[^=]+=|-e[^-=][^=]*=).*", lambda m: m.group(1) + _REDACTED, w)
+        after_flag = w in ("-e", "--env")
+        out.append(w)
+    return out
+
+
 def call_redacted(argv, **kw):
     """run, print the output with secrets blanked, return the exit code"""
     r = subprocess.run(argv, capture_output=True, text=True, errors="replace", **kw)
