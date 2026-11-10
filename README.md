@@ -497,6 +497,10 @@ log and a faster first setup.
   in the audit log.
 - **AI Assist for jobs:** describe what a job should do and Claude drafts it in the editor – task, schedule,
   profile, the tentacles it names and when to warn – or improves an existing one; you check and save it.
+- **Read-only POST calls without approval:** some APIs only read through POST (Home Assistant
+  `POST /services/todo/get_items?return_response`, search and query endpoints). A service file can list such
+  method + path patterns as reads, so they run without approval on a `confirm` part – every other POST keeps
+  waiting for approval as it does now.
 
 ## License
 
