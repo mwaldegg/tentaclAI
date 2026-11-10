@@ -65,17 +65,56 @@ def sensitive_read(words, compose=False):
     return "inspect" in w
 
 
+# docker/compose options without a value – any other option takes one (inline or the next word), so a new switch docker
+# adds shifts the parse by one word at worst, the container command after the name still stays visible
+_DOCKER_SWITCHES = set("dDitPqT")
+_DOCKER_LONG_SWITCHES = {
+    "--rm", "--init", "--privileged", "--read-only", "--sig-proxy", "--no-healthcheck", "--oom-kill-disable", "--detach",
+    "--interactive", "--tty", "--publish-all", "--help", "--quiet", "--disable-content-trust", "--use-api-socket", "--no-TTY",
+    "--no-deps", "--service-ports", "--use-aliases", "--remove-orphans", "--build", "--quiet-pull", "--debug", "--tls",
+    "--tlsverify", "--all", "--dry-run", "--compatibility", "--no-trunc", "--follow", "--timestamps", "--force",
+    "--no-cache", "--no-start", "--force-recreate", "--no-recreate", "--wait", "--abort-on-container-exit", "--with-registry-auth"}
+_DOCKER_GROUPS = {"container", "service", "compose", "image", "network", "volume", "plugin", "node", "secret", "config",
+                  "stack", "system", "swarm", "buildx", "builder", "context", "trust", "manifest"}  # "docker container exec …"
+_ENV_OPTIONS = ("--env", "--env-add")
+
+
 def env_redacted(words):
     """docker/compose words for the audit log and the approval: the values of -e/--env NAME=value blanked (a token
-    handed to a container), whatever the name – the command itself runs with the real words"""
-    out, after_flag = [], False
-    for w in words:
-        if after_flag and "=" in w:
-            w = w.split("=", 1)[0] + "=" + _REDACTED
+    handed to a container), whatever the name – only in docker's own options: the container command after the
+    container, image or service name (perl -e, sed -e) stays as it is, the approver sees what runs. The command itself
+    runs with the real words."""
+    def blank(v):
+        return v.split("=", 1)[0] + "=" + _REDACTED if "=" in v else v
+    out, i, subcommand = list(words), 0, []
+    while i < len(words):
+        w = words[i]
+        if w == "--":
+            break
+        if not w.startswith("-") or w == "-":  # a positional word: the subcommand (two for a group), then the name – done
+            if subcommand and not (len(subcommand) == 1 and subcommand[0] in _DOCKER_GROUPS):
+                break
+            subcommand.append(w)
+        elif w.startswith("--"):
+            opt, eq, value = w.partition("=")
+            if eq:
+                out[i] = f"{opt}={blank(value)}" if opt in _ENV_OPTIONS else w
+            elif opt not in _DOCKER_LONG_SWITCHES:
+                i += 1
+                if opt in _ENV_OPTIONS and i < len(words):
+                    out[i] = blank(words[i])
         else:
-            w = re.sub(r"(?s)^(--env=[^=]+=|-e[^-=][^=]*=).*", lambda m: m.group(1) + _REDACTED, w)
-        after_flag = w in ("-e", "--env")
-        out.append(w)
+            for j, c in enumerate(w[1:], 1):
+                if c in _DOCKER_SWITCHES:
+                    continue
+                if w[j + 1:]:  # -eNAME=value, -uroot
+                    out[i] = w[:j + 1] + blank(w[j + 1:]) if c == "e" else w
+                else:
+                    i += 1
+                    if c == "e" and i < len(words):
+                        out[i] = blank(words[i])
+                break
+        i += 1
     return out
 
 

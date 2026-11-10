@@ -137,6 +137,24 @@ def test_docker_env_values_stay_out_of_the_audit_log(monkeypatch):
     assert "s3cret" not in actions[1] and "A=[redacted by svc]" in actions[1]
 
 
+@pytest.mark.parametrize("words,expected", [
+    # the container command after the name stays as it is – the approver and the risk check see what runs (#110)
+    (["exec", "c", "perl", "-e", "$x=1; system('rm -rf /data')"], None),
+    (["exec", "c", "sed", "-i", "-e", "s/a=b/c/;e rm -rf /", "f"], None),
+    (["exec", "-u", "root", "-w", "/srv", "c", "sh", "-c", "-eX=1"], None),  # -u/-w take a value: c is the name
+    (["exec", "-it", "-e", "T=s", "c", "env", "-e", "A=b"], ["exec", "-it", "-e", "T=[redacted by svc]", "c", "env", "-e", "A=b"]),
+    (["exec", "-ite", "T=s", "c", "x"], ["exec", "-ite", "T=[redacted by svc]", "c", "x"]),
+    (["run", "--rm", "--name", "x", "--env", "A=s", "--network=host", "img", "-e", "B=c"],
+     ["run", "--rm", "--name", "x", "--env", "A=[redacted by svc]", "--network=host", "img", "-e", "B=c"]),
+    (["container", "run", "-d", "-eA=s", "img"], ["container", "run", "-d", "-eA=[redacted by svc]", "img"]),
+    (["service", "update", "--env-add", "A=s", "web"], ["service", "update", "--env-add", "A=[redacted by svc]", "web"]),
+    (["run", "-T", "-e", "A=s", "--", "-e", "B=c"], ["run", "-T", "-e", "A=[redacted by svc]", "--", "-e", "B=c"]),
+    (["run", "--newflag", "web", "perl", "-e", "$x=1"], None),  # an unknown option takes the name: still visible
+])
+def test_env_redacted_stops_at_the_container(words, expected):
+    assert svc.env_redacted(words) == (words if expected is None else expected)
+
+
 def test_env_values_stay_out_of_the_process_environment(tmp_path, monkeypatch):
     """child processes (ssh, docker, compose, git) must not inherit the service tokens from .env"""
     f = tmp_path / ".env"

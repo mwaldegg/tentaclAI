@@ -18,7 +18,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   (#103).
 - **svc docker / compose: `-e`/`--env` values stay out of the audit log** – a token handed to a container with
   `-e NAME=value` was logged (and shown on the approval) in plain text; the values are now blanked, the command runs
-  unchanged (#105).
+  unchanged (#105). Only docker's own options are blanked – the command that runs in the container (`perl -e …`,
+  `sed -e …` after the container name) stays visible on the approval and to its risk check (#110).
 - **pr-hints: a title edit no longer swallows the hint comment** – a run whose job is skipped cancelled the hint run of
   the same PR (#102).
 - **Jobs: a forked skill no longer swallows the review** – a job that ran `/code-review` got back only *Skill
