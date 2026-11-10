@@ -269,55 +269,118 @@ def mcp_stdio(m, tg):
     return rc
 
 
+RECONNECT_WAIT = 10  # seconds a failed reconnect stays the answer for the calls that hit the same lost session
+
+
 def mcp_bridge(m, tg):
+    """a Streamable HTTP server: each message from Claude is one POST (after the gate), the answer – JSON or an event
+    stream – goes back through it. A restarted server forgets the session (HTTP 404 on a request that carries it): the
+    proxy initializes again with Claude's own initialize, sends the request once more and tells Claude the tools may
+    have changed (notifications/tools/list_changed) – one reconnect for all requests that hit the same lost session."""
     import ssl
     import urllib.error
     import urllib.request
     ctx = ssl._create_unverified_context() if m.get("insecure_tls") else ssl.create_default_context()
     headers = {str(k): str(v) for k, v in (m.get("headers") or {}).items()}
-    state = {"session": None, "version": None}
+    state = {"session": None, "version": None, "init": None, "initialized": None, "failed": None}
+    reconnecting = threading.Lock()
     emit = _emitter()
 
     def out(msg):
         note_version(msg)
         emit(tg.response(msg))
 
-    def post(line, rid):
+    def exchange(line, sink, session):
+        """one POST in session (None: none yet); every message of the answer goes to sink → the session id the server
+        gave, if any – HTTPError and network errors are the caller's"""
         h = dict(headers, **{"Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
-        if state["session"]:
-            h["Mcp-Session-Id"] = state["session"]
+        if session:
+            h["Mcp-Session-Id"] = session
         if state["version"]:
             h["MCP-Protocol-Version"] = state["version"]
         req = urllib.request.Request(m["url"], data=line.encode(), headers=h, method="POST")
+        with urllib.request.urlopen(req, context=ctx, timeout=300) as r:
+            sid = r.headers.get("Mcp-Session-Id")
+            ctype = r.headers.get("Content-Type", "")
+            if r.status == 202:
+                return sid
+            if "text/event-stream" in ctype:
+                data = []
+                for raw in r:
+                    l = raw.decode("utf-8", "replace").rstrip("\r\n")
+                    if l.startswith("data:"):
+                        data.append(l[5:].lstrip())
+                    elif not l and data:
+                        msg = json.loads("\n".join(data))
+                        data = []
+                        sink(msg)
+                if data:
+                    sink(json.loads("\n".join(data)))
+                return sid
+            body = r.read().decode("utf-8", "replace").strip()
+            if body:
+                msg = json.loads(body)
+                for x in (msg if isinstance(msg, list) else [msg]):
+                    sink(x)
+            return sid
+
+    def reconnect(lost):
+        """initialize again after the server lost session `lost` → '' or why it failed. A request that comes later with
+        the same lost session finds the new one and only retries; a failure stays the answer for RECONNECT_WAIT
+        seconds (no initialize per waiting call), the lost session stays set so a later request tries again"""
+        with reconnecting:
+            if state["session"] != lost:
+                return ""
+            failed = state["failed"]
+            if failed and failed[0] == lost and time.time() - failed[1] < RECONNECT_WAIT:
+                return failed[2]
+            why = handshake() if state["init"] else "no initialize to repeat"
+            if why:
+                state["failed"] = (lost, time.time(), why)  # the lost session stays: a later request tries again
+                return why
+        emit({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})  # the restarted server may offer other tools
+        return ""
+
+    def handshake():
+        """Claude's initialize and initialized again in a new session – its answer isn't Claude's"""
         try:
-            with urllib.request.urlopen(req, context=ctx, timeout=300) as r:
-                sid = r.headers.get("Mcp-Session-Id")
-                if sid:
-                    state["session"] = sid
-                ctype = r.headers.get("Content-Type", "")
-                if r.status == 202:
-                    return
-                if "text/event-stream" in ctype:
-                    data = []
-                    for raw in r:
-                        l = raw.decode("utf-8", "replace").rstrip("\r\n")
-                        if l.startswith("data:"):
-                            data.append(l[5:].lstrip())
-                        elif not l and data:
-                            msg = json.loads("\n".join(data))
-                            data = []
-                            out(msg)
-                    if data:
-                        out(json.loads("\n".join(data)))
-                    return
-                body = r.read().decode("utf-8", "replace").strip()
-                if body:
-                    msg = json.loads(body)
-                    for x in (msg if isinstance(msg, list) else [msg]):
-                        out(x)
+            got = []
+            sid = exchange(json.dumps({**state["init"], "id": "svc-reconnect"}), got.append, None)
+            if not sid or not any(isinstance(x, dict) and x.get("id") == "svc-reconnect" and "result" in x for x in got):
+                return "the server didn't start a session"
+            for msg in got:
+                note_version(msg)
+            if state["initialized"]:
+                exchange(state["initialized"], lambda msg: None, sid)
+            state["session"] = sid
         except urllib.error.HTTPError as e:
-            if e.code == 404 and state["session"]:
-                state["session"] = None  # session expired – the client has to initialize again
+            return f"HTTP {e.code} on initialize"
+        except Exception as e:  # noqa: BLE001 – network errors, bad JSON
+            return str(e)[:200]
+        return ""
+
+    def send(line, session):
+        sid = exchange(line, out, session)
+        if sid and sid != session:
+            state["session"] = sid  # Claude's initialize starts the session
+
+    def post(line, msg, rid):
+        with reconnecting:  # not in the middle of a reconnect
+            lost = state["session"]
+        try:
+            try:
+                send(line, lost)
+            except urllib.error.HTTPError as e:
+                if e.code != 404 or not lost or msg.get("method") == "initialize":
+                    raise
+                why = reconnect(lost)
+                if why:
+                    if rid is not None:
+                        out({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message":
+                             f"MCP proxy: upstream MCP session lost, reconnect failed: {why}"}})
+                    return
+                send(line, state["session"])  # once – a second failure is answered below
+        except urllib.error.HTTPError as e:  # a 404 keeps the session: the next request reconnects again
             if rid is not None:
                 out({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": f"HTTP {e.code} from MCP server"}})
         except Exception as e:  # noqa: BLE001 – network errors, bad JSON
@@ -329,7 +392,7 @@ def mcp_bridge(m, tg):
         if answer:
             emit(answer)
         else:
-            post(line, rid)
+            post(line, msg, rid)
 
     def note_version(msg):
         if isinstance(msg, dict) and isinstance(msg.get("result"), dict) and msg["result"].get("protocolVersion"):
@@ -337,6 +400,10 @@ def mcp_bridge(m, tg):
 
     for line, msg in _messages(sys.stdin):
         rid = msg.get("id")
+        if msg.get("method") == "initialize":
+            state["init"] = msg
+        elif msg.get("method") == "notifications/initialized":
+            state["initialized"] = line
         if rid is None or msg.get("method") == "initialize" or not state["session"] and not state["version"]:
             gated(line, msg, rid)  # initialize and notifications in order (initialize sets the session id)
         else:

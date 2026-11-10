@@ -941,6 +941,88 @@ def test_mcp_bridge_gates_tool_calls(monkeypatch, capsys, tmp_path, mcp_gate):
     assert [s[0] for s in seen] == ["initialize", "tools/list"] and seen[0][1] == "Bearer t"  # wipe never sent
 
 
+@pytest.mark.parametrize("init_fails", [False, True])
+def test_mcp_bridge_reconnects_after_a_server_restart(monkeypatch, capsys, tmp_path, mcp_gate, init_fails):
+    """a restarted server forgets the session (404): the proxy initializes again once – also for parallel calls –,
+    retries each call and tells Claude the tools may have changed; a failed reconnect says so (#104)"""
+    import http.server
+    import io
+    import threading
+    import time as _time
+    srv_state = {"sessions": set(), "n": 0, "restarted": False}
+    seen, lock = [], threading.Lock()
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def reply(self, code, obj=None, sid=None):
+            body = json.dumps(obj).encode() if obj else b""
+            self.send_response(code)
+            if sid:
+                self.send_header("Mcp-Session-Id", sid)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            msg = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            sid = self.headers.get("Mcp-Session-Id")
+            with lock:
+                seen.append((msg.get("method"), sid, msg.get("id")))
+                if msg.get("method") == "initialize":
+                    if init_fails and srv_state["restarted"]:
+                        return self.reply(500)
+                    srv_state["n"] += 1
+                    new = f"s{srv_state['n']}"
+                    srv_state["sessions"].add(new)
+                    return self.reply(200, {"jsonrpc": "2.0", "id": msg["id"], "result": {"protocolVersion": "2025-06-18"}}, new)
+                if sid not in srv_state["sessions"]:
+                    return self.reply(404)
+                if msg.get("method") == "notifications/initialized":
+                    if not srv_state["restarted"]:  # the server restarts right after the first handshake
+                        srv_state["restarted"] = True
+                        srv_state["sessions"].clear()
+                    return self.reply(202)
+            res = {"tools": [{"name": "get", "annotations": {"readOnlyHint": True}}]} if msg["method"] == "tools/list" \
+                else {"content": [{"type": "text", "text": f"ok {sid}"}]}
+            self.reply(200, {"jsonrpc": "2.0", "id": msg["id"], "result": res})
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    for k in ("http_proxy", "HTTP_PROXY"):
+        monkeypatch.delenv(k, raising=False)
+    out = []
+    try:
+        m = {"type": "http", "url": f"http://127.0.0.1:{srv.server_address[1]}/mcp", "access": "read"}
+        monkeypatch.setattr(sys, "stdin", io.StringIO("\n".join([
+            _rpc(1, "initialize"), json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}), _rpc(2, "tools/list")]
+            + [_rpc(i, "tools/call", name="get", arguments={}) for i in (3, 4, 5)]) + "\n"))
+        assert svc.mcp_bridge(m, svc.ToolGate("demo", m)) == 0
+        for _ in range(100):  # the requests run in threads
+            out += capsys.readouterr().out.splitlines()
+            if {2, 3, 4, 5} <= {json.loads(x).get("id") for x in out}:
+                break
+            _time.sleep(0.05)
+    finally:
+        srv.shutdown()
+    got = {x.get("id"): x for x in map(json.loads, out) if "id" in x}
+    inits = [s for s in seen if s[0] == "initialize"]
+    assert len(inits) == 2 and inits[1][2] == "svc-reconnect"  # one reconnect for all four, with an id of its own
+    assert "svc-reconnect" not in got and got[1]["result"]["protocolVersion"]  # Claude sees only its own answer
+    changed = [x for x in map(json.loads, out) if x.get("method") == "notifications/tools/list_changed"]
+    if init_fails:
+        assert not changed
+        for i in (2, 3, 4, 5):
+            assert "reconnect failed: HTTP 500 on initialize" in got[i]["error"]["message"], got[i]
+    else:
+        assert len(changed) == 1
+        assert got[2]["result"]["tools"][0]["name"] == "get"
+        for i in (3, 4, 5):
+            assert got[i]["result"]["content"][0]["text"] == "ok s2"  # retried in the new session
+        assert ("notifications/initialized", "s2", None) in seen
+
+
 def test_svc_list_columns_fit_long_names(monkeypatch, capsys):
     monkeypatch.setattr(svc, "status", lambda s: "active")
     services = {"short": {"api": {}}, "mail_root_example_org_x": {"imap": {}, "system": "origin"}}

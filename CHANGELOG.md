@@ -5,6 +5,12 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **MCP: the proxy reconnects after the server restarts** – after a restart of an http MCP server (Home Assistant
+  after an update) every tool call failed with *Tool … not found* until a new Claude session: the proxy dropped the
+  lost session and never initialized again, and Claude kept the old tool names. On an HTTP 404 for its session the
+  proxy now repeats Claude's `initialize` (one reconnect for parallel calls), sends the call once more and sends
+  `notifications/tools/list_changed`, so Claude fetches the new tool list. A failed reconnect answers *upstream MCP
+  session lost, reconnect failed: …* (#104).
 - **Fewer false prompt-injection alerts** – a job reading the same GitHub issues every night raised the same
   *Possible prompt injection* each run, often twice. Now a finding (tentacle or tool, reason, excerpt) is flagged and
   notified once in 30 days – again it is an ordinary entry *seen before: …*, a new finding next to it still alerts; up

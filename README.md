@@ -287,7 +287,9 @@ every write wait for your approval in tentacontrol → **Approvals** (denied or 
 The names before v0.16, `ro` and `rw`, still work as `read` and `write`; tentacontrol rewrites them on start (with a
 backup) and only writes the new ones. An unknown value counts as `read`.
 **MCP tool calls** go through the same gate: every MCP server is registered in Claude as `svc mcp-proxy <name>` (http
-bridged with the tokens added, stdio as a child process run by the service's own user), which sees each tool call. Tools the server marks
+bridged with the tokens added, stdio as a child process run by the service's own user), which sees each tool call. When an
+http server restarts and forgets the session, the proxy connects again on its own and tells Claude to fetch the tool list
+again – no new session needed. Tools the server marks
 read-only (`readOnlyHint`) run freely and are logged as reads; every other tool is a write – `read` hides and blocks it,
 `write` logs it, `confirm` asks first; a tool marked `destructiveHint` is a risky write (asked on its own, even during a
 grant). Correct the server's marks with `"read_tools"` / `"write_tools"` (names or `fnmatch` patterns) in the `mcp`
