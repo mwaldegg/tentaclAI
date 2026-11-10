@@ -11,15 +11,15 @@ permissions:
   contents: read
   pull-requests: write
 
-concurrency:  # quick pushes: only the newest run writes the comment
-  group: pr-hints-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   hints:
     runs-on: ubuntu-latest
     # a title or base edit changes nothing the hints look at
     if: ${{ !startsWith(github.head_ref, 'simplify/') && github.actor != 'dependabot[bot]' && (github.event.action != 'edited' || github.event.changes.body) }}
+    # quick pushes: only the newest run writes the comment – on the job, so a run whose job is skipped cancels nothing
+    concurrency:
+      group: pr-hints-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     steps:
       - name: Comment
         env:
