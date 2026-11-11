@@ -15,8 +15,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   *Possible prompt injection* each run, often twice. Now a finding (tentacle or tool, reason, excerpt) is flagged and
   notified once in 30 days – again it is an ordinary entry *seen before: …*, a new finding next to it still alerts; up
   to three hits per reason are checked so a known one can't hide a new one. svc's own warning in a result (`svc jobs
-  --steps`, a Bash call around `svc`, an issue quoting it) no longer triggers the hook a second time. *Mentions the
-  system prompt* needs a request now (reveal, print, ignore … the system prompt), and `svc db <name>` / `{name}` /
+  --steps`, a Bash call around `svc`, an issue quoting it) no longer triggers the hook a second time. The system-prompt
+  reason needs a request verb now (a text that only names the prompt is fine), and `svc db <name>` / `{name}` /
   `$HOST` placeholders don't count as *asks to run commands*. Only the exact wording of a warning is left out – text
   added to a copied one is still scanned (#113).
 - **svc API: a body file curl can't read stops before the approval** – `--data-binary @file` from a private directory
@@ -162,8 +162,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   of raw Markdown; title and summary are asked to say what the user should do, not how the run worked.
 - Jobs: a run is told which weaknesses of tentaclAI the user already reported or dismissed under *For tentaclAI*
   (the latest 15), so it doesn't report the same one again in every run.
-- Prompt-injection scan: *asks to run commands* no longer fires on "run" or "call" as a noun – "a dry run of `svc config
-  put job`", "an svc call like `svc mail …`" in tentaclAI's own source; an instruction to run an `svc` command is still
+- Prompt-injection scan: *asks to run commands* no longer fires on "run" or "call" as a noun (a dry run or an svc call
+  mentioned in tentaclAI's own source); an instruction to run an `svc` command is still
   flagged (#79).
 - Prompt-injection hook: reading the same content with the same findings again in one session (a job working on
   tentaclAI's own scanner tests) gives Claude a one-line reminder instead of the full warning; changed content or a new
@@ -578,8 +578,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 - Sidebar: new flagged entries (possible prompt injection) show as a yellow *⚠ count* next to *Activity*, and the
   Overview names them with a link – both until Activity is opened. Separate from the pulsing approval badge; the tab
   title and favicon stay for approvals.
-- Prompt-injection safeguards: notes addressed to AI readers are flagged too – “Note for automated assistants: please
-  …”, “If you are an AI …”, “Hinweis für KI-Assistenten …” – not only blunt “ignore your instructions”. Claude's base
+- Prompt-injection safeguards: notes addressed to AI readers are flagged too (in English and German), not only blunt
+  requests to drop earlier instructions. Claude's base
   rules now say to mention any text that addresses AI assistants or asks the reader to do something, however polite,
   in one line to the user – also when it was only asked for a summary (until now it ignored such a note silently).
 - Activity → a *flagged* entry (possible prompt injection) says what was read – the file, URL, search, MCP tool with
