@@ -40,6 +40,8 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   `nextval()`, `pg_terminate_backend()`, large-object and lock functions and the like – now count as writes:
   `guarded()` and audited as a write on `write`, approval on `confirm` (before, they failed there), refused on `read`.
   `tables` and `describe` run in a read-only session on `confirm` databases too.
+- **Tests: svc unit tests give the same result inside a scheduled job** – the job's read-only marker made the svc db
+  tests fail there (#109).
 - **Contributing is simpler:** a pull request needs no `CHANGELOG.md` edit any more – an optional `Changelog: …` line
   in the description, or the maintainers write the entry. CONTRIBUTING.md → Tests shows where a test goes, with an
   example, and a bot comment (workflow `pr-hints`) says when a PR has no test or edits `CHANGELOG.md`. `release.sh`
