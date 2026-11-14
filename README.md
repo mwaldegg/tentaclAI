@@ -209,6 +209,7 @@ svc files <name> ls|cat|grep|pull|diff|push # folders on SSH hosts; edit in /wor
 svc mail <name|address> send|list|read|flag|move    # mail: send (smtp), read a mailbox (imap) – mail text is untrusted
 svc git | git sync [name]                   # repos in /workspace/repos (no credentials inside)
 svc git push|pull|fetch <repo> [branch]     # through svc's mirror – access mode and approval apply
+svc git push <repo> tag <tag> | --tags      # a tag / all new tags, same way (moving a tag needs --force)
 svc ssh <host> [command]                    # command or shell on an SSH host (status commands free, others need approval)
 svc config put service|system|local|skill|job …   # Claude proposes a service or system file, the site rules, a site skill or a job – always needs approval
 svc jobs [name|--group G] [--steps]         # scheduled jobs (one group), a definition with its recent runs (and Claude's steps)

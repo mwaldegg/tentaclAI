@@ -5,6 +5,11 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **`svc git push` pushes tags** – `svc git push <repo> tag <tag>` pushes one tag (annotated or lightweight),
+  `--tags` every local tag the remote doesn't have yet, through the mirror with the same access mode, approval and
+  audit as a branch. A tag that differs from the remote's is moved only one at a time with `tag <tag> --force`;
+  `--tags` names it and leaves it alone. Pushing a tag name as a branch now says so instead of *branch … not found*
+  (#114).
 - **MCP: the proxy reconnects after the server restarts** – after a restart of an http MCP server (Home Assistant
   after an update) every tool call failed with *Tool … not found* until a new Claude session: the proxy dropped the
   lost session and never initialized again, and Claude kept the old tool names. On an HTTP 404 for its session the

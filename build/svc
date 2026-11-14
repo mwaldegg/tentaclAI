@@ -18,6 +18,8 @@ resolved from the stack's .env (read fresh on every call) and the container envi
   svc git sync [name...]           clone missing repos, apply settings, fetch
   svc git fetch|pull <name>        fetch from the remote (pull: also fast-forward the current branch)
   svc git push <name> [branch] [--force]   push a branch (credentials stay with svc)
+  svc git push <name> tag <tag> [--force] | --tags
+                                   push a tag / every tag the remote doesn't have yet (a moved tag: tag <tag> --force)
   svc ssh <host> [command...]      command (or a shell) on an SSH host – per-host access, default confirm
   svc pending                      approvals waiting in tentacontrol → Approvals (and active grants)
   svc config put service <name> <file> | put system <name> <file> | put local <file> | put skill <name> <file>

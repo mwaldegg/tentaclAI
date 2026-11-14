@@ -240,43 +240,96 @@ def take_file(src, dest, limit=2 * 2**30):
         os.close(fd)
 
 
+PUSH_REFS = "refs/tentaclai/out/"  # in the mirror: what Claude's bundle brought, until it is pushed
+
+
+def refs_in(out):
+    """`for-each-ref --format='%(objectname) %(refname)'` → {ref: object}"""
+    return dict(reversed(line.split(" ", 1)) for line in out.splitlines() if " " in line)
+
+
+def push_refs(name, path, m, rest, force):
+    """the refs `svc git push` sends: a branch (default: the current one), `tag <name>` or `--tags` (every local tag
+    the remote doesn't have yet – a tag that differs from the remote's is only moved one at a time, with --force)"""
+    if "--tags" in rest:
+        if rest != ["--tags"] or force:
+            sys.exit(f"svc: --tags pushes only new tags – move a tag one at a time: svc git push {name} tag <tag> --force")
+        fmt = ["for-each-ref", "--format=%(objectname) %(refname)", "refs/tags"]
+        local, remote = refs_in(claude_git(fmt, path, quiet=True).stdout), refs_in(git_run(fmt, cwd=m, quiet=True).stdout)
+        for ref in sorted(r for r in local if r in remote and remote[r] != local[r]):
+            tag = ref.removeprefix("refs/tags/")
+            print(f"    tag {tag} differs from the remote's – not pushed (svc git push {name} tag {tag} --force)")
+        return sorted(r for r in local if r not in remote)
+    if len(rest) == 2 and rest[0] == "tag":
+        tag = rest[1]
+        if tag.startswith("-") or git_run(["check-ref-format", f"refs/tags/{tag}"], quiet=True).returncode != 0:
+            sys.exit(f"svc: {tag} is not a valid tag name")
+        if claude_git(["rev-parse", "--verify", "--quiet", f"refs/tags/{tag}"], path, quiet=True).returncode != 0:
+            sys.exit(f"svc: tag {tag} not found in {path}")
+        return [f"refs/tags/{tag}"]
+    if len(rest) > 1:
+        sys.exit(f"svc: svc git push {name} [branch] | tag <tag> | --tags  [--force]")
+    branch = rest[0] if rest else claude_git(["rev-parse", "--abbrev-ref", "HEAD"], path, quiet=True).stdout.strip()
+    if not branch or branch == "HEAD" or claude_git(["check-ref-format", "--branch", branch], path, quiet=True).returncode != 0:
+        sys.exit("svc: no branch to push (detached HEAD?) – svc git push <name> <branch>")
+    if claude_git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], path, quiet=True).returncode != 0:
+        if claude_git(["rev-parse", "--verify", "--quiet", f"refs/tags/{branch}"], path, quiet=True).returncode == 0:
+            sys.exit(f"svc: {branch} is a tag, not a branch – svc git push {name} tag {branch}")
+        sys.exit(f"svc: branch {branch} not found in {path}")
+    return [f"refs/heads/{branch}"]
+
+
+def drop_push_refs(m):
+    out = git_run(["for-each-ref", "--format=%(refname)", PUSH_REFS, "refs/tentaclai/push"], cwd=m, quiet=True).stdout
+    for ref in out.split():
+        git_run(["update-ref", "-d", ref], cwd=m, quiet=True)
+
+
 def cmd_git_push(services, name, args):
     git, path = get_git(services, name)
     force = any(a in ("-f", "--force") for a in args)
     rest = [a for a in args if a not in ("-f", "--force")]
-    branch = rest[0] if rest else claude_git(["rev-parse", "--abbrev-ref", "HEAD"], path, quiet=True).stdout.strip()
-    if not branch or branch == "HEAD" or claude_git(["check-ref-format", "--branch", branch], path, quiet=True).returncode != 0:
-        sys.exit("svc: no branch to push (detached HEAD?) – svc git push <name> <branch>")
+    # a branch or a tag is checked before the remote is contacted; --tags compares with the freshly fetched mirror
+    refs = None if "--tags" in rest else push_refs(name, path, None, rest, force)
     if mirror_fetch(name, git) is None:
         return 1
     m = mirror_path(name)
+    refs = refs or push_refs(name, path, m, rest, force)
+    if not refs:
+        print(f"✓ {name}: no new tags to push")
+        return 0
     stage = core.stage_dir(core.CLAUDE_USER)
     try:
         b = os.path.join(stage, "push.bundle")
-        if claude_git(["bundle", "create", "--quiet", b, f"refs/heads/{branch}"], path).returncode != 0:
-            sys.exit(f"svc: branch {branch} not found in {path}")
+        if claude_git(["bundle", "create", "--quiet", b, *refs], path).returncode != 0:
+            sys.exit(f"svc: could not bundle {' '.join(refs)} in {path}")
         own = core.stage_dir()  # root's own: the stage dir is Claude's, root never reads a path there that could be swapped
         try:
             ob = os.path.join(own, "push.bundle")
             take_file(b, ob)
-            if git_run(["fetch", "--quiet", ob, f"+refs/heads/{branch}:refs/tentaclai/push"], cwd=m).returncode != 0:
+            # --no-tags: a tag of the bundle lands in the mirror only once the remote has it (--tags compares with it)
+            if git_run(["fetch", "--quiet", "--no-tags", ob] + [f"+{r}:{PUSH_REFS}{r[5:]}" for r in refs], cwd=m).returncode != 0:
                 return 1
         finally:
             shutil.rmtree(own, ignore_errors=True)
-        commit = git_run(["rev-parse", "--short", "refs/tentaclai/push"], cwd=m).stdout.strip()
-        action = f"git push {branch} ({commit}){' --force' if force else ''} → {git['url']}"
+
+        def label(ref):
+            commit = git_run(["rev-parse", "--short", f"{PUSH_REFS}{ref[5:]}^{{}}"], cwd=m).stdout.strip()
+            return (f"tag {ref[10:]}" if ref.startswith("refs/tags/") else ref[11:]) + f" ({commit})"
+        what = ", ".join(label(r) for r in refs)
+        action = f"git push {what}{' --force' if force else ''} → {git['url']}"
 
         def push():
             r = git_run(remote_args(name, git) + ["push", "--quiet"] + (["--force"] if force else [])
-                        + ["origin", f"refs/tentaclai/push:refs/heads/{branch}"], cwd=m)
+                        + ["origin"] + [f"{PUSH_REFS}{r[5:]}:{r}" for r in refs], cwd=m)
             return r.returncode
         rc = gate.guarded(name, "git", gate.access_mode(git), action, push)
     finally:
-        git_run(["update-ref", "-d", "refs/tentaclai/push"], cwd=m, quiet=True)
+        drop_push_refs(m)
         shutil.rmtree(stage, ignore_errors=True)
     if rc == 0:
         bundle_to_claude(name, git, path)
-        print(f"✓ {name}: pushed {branch} ({commit})")
+        print(f"✓ {name}: pushed {what}")
     return rc
 
 
@@ -298,6 +351,6 @@ def cmd_git_credential(services, name, op):
 def git_push_hook(services, name, args):
     """pre-push hook of every working copy: plain `git push` has no credentials – push through svc instead"""
     sys.stdin.read()
-    print(f"tentaclai: push with `svc git push {name} [branch]` – credentials, access mode and approval are handled there.",
+    print(f"tentaclai: push with `svc git push {name} [branch]` (tags: `tag <tag>` or `--tags`) – credentials, access mode and approval are handled there.",
           file=sys.stderr)
     return 1

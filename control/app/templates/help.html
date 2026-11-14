@@ -437,6 +437,7 @@ svc jobs [&lt;name&gt; [--steps]]   scheduled jobs, a definition with its recent
 svc jobs --group &lt;group&gt;       the jobs of one group
 svc git | svc git sync    repositories: status / clone + fetch
 svc git push|pull|fetch &lt;repo&gt;   push a branch / update – credentials stay with svc
+svc git push &lt;repo&gt; tag &lt;tag&gt; | --tags   push a tag / all new tags (moving a tag needs --force)
 svc ssh [&lt;host&gt; [cmd]]     SSH hosts / a command or shell on one (access per host, default confirm)
 svc config put service|system|skill &lt;name&gt; &lt;file&gt; | local &lt;file&gt; | job &lt;name&gt; &lt;file&gt;   service / system file, site skill, site rules, job (needs approval)
 svc pending               approvals waiting in Approvals and active grants (also shown in Claude's status line)

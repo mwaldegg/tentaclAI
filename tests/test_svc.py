@@ -1221,6 +1221,53 @@ def test_bundle_to_claude_keeps_local_only_tags(tmp_path, monkeypatch):
     assert "local-only" in tags and "v2" in tags
 
 
+def test_git_push_tags(tmp_path, monkeypatch, capsys):
+    """svc git push <repo> tag <tag> | --tags: through the mirror like a branch; a moved tag only with --force (#114)"""
+    def git(*args, cwd):
+        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args], cwd=cwd, check=True,
+                              capture_output=True, text=True).stdout.strip()
+    remote, work = tmp_path / "remote.git", tmp_path / "work"
+    git("init", "--quiet", "--bare", "-b", "main", str(remote), cwd=tmp_path)
+    git("clone", "--quiet", str(remote), str(work), cwd=tmp_path)
+    git("commit", "--quiet", "--allow-empty", "-m", "one", cwd=work)
+    git("push", "--quiet", "origin", "main", cwd=work)
+    git("tag", "-a", "v1", "-m", "release 1", cwd=work)
+    git("tag", "v2", cwd=work)
+    cfg = {"url": str(remote), "access": "write"}
+    monkeypatch.setattr(svc.core, "MIRRORS", str(tmp_path / "mirrors"))
+    monkeypatch.setattr(svc, "get_git", lambda services, name: (cfg, str(work)))
+    actions = []
+    monkeypatch.setattr(svc, "guarded", lambda name, part, mode, action, run, **kw: actions.append(action) or run())
+
+    def on_remote(ref):
+        return subprocess.run(["git", "rev-parse", "--verify", "--quiet", ref], cwd=remote, capture_output=True,
+                              text=True).stdout.strip()
+
+    assert svc.cmd_git_push({}, "repo", ["tag", "v1"]) == 0
+    assert git("cat-file", "-t", "refs/tags/v1", cwd=remote) == "tag"  # annotated stays annotated
+    assert on_remote("refs/tags/v1") == git("rev-parse", "refs/tags/v1", cwd=work) and not on_remote("refs/tags/v2")
+    assert actions[-1].startswith("git push tag v1 (") and "--force" not in actions[-1]
+    assert svc.cmd_git_push({}, "repo", ["--tags"]) == 0  # only the new one
+    assert on_remote("refs/tags/v2") and actions[-1].startswith("git push tag v2 (")
+    assert svc.cmd_git_push({}, "repo", ["--tags"]) == 0 and len(actions) == 2  # nothing new: no approval
+    git("commit", "--quiet", "--allow-empty", "-m", "two", cwd=work)
+    git("tag", "-f", "-a", "v1", "-m", "moved", cwd=work)
+    capsys.readouterr()
+    assert svc.cmd_git_push({}, "repo", ["--tags"]) == 0 and len(actions) == 2  # a moved tag is not pushed by --tags
+    assert "tag v1 differs" in capsys.readouterr().out
+    assert svc.cmd_git_push({}, "repo", ["tag", "v1"]) != 0  # the remote refuses to move a tag without --force
+    assert svc.cmd_git_push({}, "repo", ["tag", "v1", "--force"]) == 0 and actions[-1].endswith(f"--force → {remote}")
+    assert on_remote("refs/tags/v1") == git("rev-parse", "refs/tags/v1", cwd=work)
+    mirror = tmp_path / "mirrors" / "repo.git"
+    assert git("for-each-ref", "refs/tentaclai", cwd=mirror) == ""  # no leftovers in the mirror
+    assert svc.cmd_git_push({}, "repo", ["main"]) == 0 and actions[-1].startswith("git push main (")  # branches as before
+    for args, msg in ((["v2"], "v2 is a tag, not a branch"), (["tag", "v9"], "tag v9 not found"),
+                      (["tag", "-x"], "not a valid tag name"), (["--tags", "--force"], "one at a time"),
+                      (["--tags", "v2"], "one at a time")):
+        with pytest.raises(SystemExit, match=msg):
+            svc.cmd_git_push({}, "repo", args)
+
+
 @pytest.mark.parametrize("extra, refused", [
     (["-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10"], None),  # svc test
     (["-sS", "-H", "Accept: x", "-d", '{"a": 1}'], None),
