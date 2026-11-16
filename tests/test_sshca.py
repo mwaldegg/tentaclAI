@@ -194,3 +194,11 @@ def test_switch_to_certificates_and_back(certhost, logged_in, monkeypatch, takes
     html = logged_in.post("/ssh/certbox/login/key").text
     assert "logs in with the key" in html and sshhosts.get("certbox")["auth"] == "key"
     assert calls == [("key", "certbox"), ("off", False, True)]
+
+
+def test_ca_line_per_host(certhost, logged_in):
+    html = logged_in.get("/ssh/certbox/caline").text
+    assert 'cert-authority,principals=&#34;tentaclai-certbox&#34; ssh-ed25519 ' in html or \
+        'cert-authority,principals="tentaclai-certbox" ssh-ed25519 ' in html
+    page = logged_in.get("/ssh").text
+    assert "/ssh/certbox/caline" in page and "&lt;alias&gt;" not in page

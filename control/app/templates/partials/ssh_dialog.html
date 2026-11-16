@@ -140,6 +140,17 @@
   <p class="help">tentaclAI logs in with the key once, adds the <code>cert-authority</code> line (keeping options like <code>from=</code> of its key line), then checks a login with a certificate – if the host doesn't take it, everything goes back to the key.</p>
   {% endif %}
 
+{% elif step == "caline" %}
+  {{ head("CA line for " ~ alias, f.user ~ "@" ~ f.hostname ~ " · principal " ~ principal) }}
+  <p class="small">With this line in <code>~/.ssh/authorized_keys</code> of {{ f.user }} the host takes tentaclAI's certificates for <code>{{ principal }}</code> – and only those.</p>
+  <div class="card-head"><span></span><button class="btn sm" data-copy="#ca-host-line">{{ icon('copy') }}Copy</button></div>
+  <pre class="rc" id="ca-host-line" style="white-space:pre-wrap;word-break:break-all">{{ line }}</pre>
+  <p class="help">Does the key line on the host carry options such as <code>from="…"</code>? Add them after the principal, separated by a comma. Then switch the host under <em>Login</em> – that step also adds this line by itself (keeping the options), so adding it by hand is only needed for a host tentaclAI can't log in to yet.</p>
+  <div class="row" style="margin-top:12px">
+    {% if f.auth != 'cert' %}<button class="btn primary" hx-get="/ssh/{{ alias }}/login" hx-target="#ssh-dlg-body">{{ icon('key') }}Login …</button>{% endif %}
+    <button class="btn" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+
 {% elif step == "remove" %}
 <form hx-post="/ssh/{{ alias }}/remove" hx-target="#ssh-dlg-body" hx-indicator="#ssh-dlg-spin">
   {{ head("Remove " ~ alias) }}

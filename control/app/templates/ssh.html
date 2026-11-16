@@ -42,6 +42,7 @@
           <td class="faint small">{{ h.file }}</td>
           <td style="text-align:right;white-space:nowrap">
             <button class="btn sm" hx-post="/ssh/{{ h.alias }}/test" hx-target="#t-{{ loop.index }}">Test</button>
+            {% if ca_line %}<button class="btn sm" title="The authorized_keys line for certificates on this host" hx-get="/ssh/{{ h.alias }}/caline" hx-target="#ssh-dlg-body" onclick="document.getElementById('dlg-ssh').showModal()">CA line</button>{% endif %}
             <button class="btn sm" hx-get="/ssh/{{ h.alias }}/edit" hx-target="#ssh-dlg-body" onclick="document.getElementById('dlg-ssh').showModal()">Edit</button>
             <button class="btn sm ghost" title="Remove" hx-get="/ssh/{{ h.alias }}/remove" hx-target="#ssh-dlg-body" onclick="document.getElementById('dlg-ssh').showModal()">{{ icon('trash') }}</button>
           </td>
@@ -63,8 +64,8 @@
   {% if ca_line %}
   <div class="card-head" style="margin-top:14px"><h2>Certificate authority</h2>
     <button class="btn sm" data-copy="#caline">{{ icon('copy') }}Copy</button></div>
-  <pre class="rc" id="caline" style="word-break:break-all">cert-authority,principals="tentaclai-&lt;alias&gt;" {{ ca_line }}</pre>
-  <p class="help">For a host that should take certificates: this line in <code>authorized_keys</code> (with the host's alias in the principal) – then switch the host to <em>certificate</em>. <em>Login</em> in the table does both for you.</p>
+  <pre class="rc" id="caline" style="word-break:break-all">{{ ca_line }}</pre>
+  <p class="help">tentaclAI's CA key. The ready <code>authorized_keys</code> line for one host (with its principal) is under <em>CA line</em> in that host's row; <em>Login</em> puts it there for you.</p>
   {% endif %}
 </dialog>
 <script>

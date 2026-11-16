@@ -227,6 +227,18 @@ async def ssh_login(request: Request, alias: str):
                        minutes=sshca.minutes())
 
 
+@router.get("/ssh/{alias}/caline", response_class=HTMLResponse)
+async def ssh_caline(request: Request, alias: str):
+    """the authorized_keys line that lets this host take tentaclAI's certificates – for adding it by hand"""
+    h = sshhosts.get(alias)
+    if not h:
+        return _ssh_dialog(request, "result", title="Not found", results=[(False, f"host {alias} not found")])
+    if not sshca.available():
+        return _ssh_dialog(request, "result", title="No CA", results=[(False, "the volume ssh-ca is missing – run docker compose up -d in the stack directory")])
+    principal = tclib.ssh_principal(h)
+    return _ssh_dialog(request, "caline", alias=alias, f=h, principal=principal, line=sshca.authorized_line(principal))
+
+
 @router.post("/ssh/{alias}/login/cert", response_class=HTMLResponse)
 async def ssh_login_cert(request: Request, alias: str):
     """key → certificates: CA line on the host (logging in with the key), login "cert", check that the host takes the
