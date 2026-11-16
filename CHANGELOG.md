@@ -2,7 +2,7 @@
 
 All notable changes, newest first. Every release lists **upgrade steps** from the previous one.
 
-## Unreleased
+## v0.25.0 – 2026-11-16
 
 ### Changes / fixes
 - **`svc git push` pushes tags** – `svc git push <repo> tag <tag>` pushes one tag (annotated or lightweight),
