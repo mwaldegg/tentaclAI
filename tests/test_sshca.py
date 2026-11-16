@@ -202,3 +202,41 @@ def test_ca_line_per_host(certhost, logged_in):
         'cert-authority,principals="tentaclai-certbox" ssh-ed25519 ' in html
     page = logged_in.get("/ssh").text
     assert "/ssh/certbox/caline" in page and "&lt;alias&gt;" not in page
+
+
+def test_manual_commands_add_the_line(tmp_path):
+    """the command shown for adding a line by hand works as written (as the user) – quotes of the CA line included"""
+    from app import sshops
+    line = f'cert-authority,principals="tentaclai-box" {CA}'
+    cmds = sshops.manual_commands("deploy", line)
+    assert [w for w, _ in cmds] == ["as deploy", "as root"] and "getent passwd deploy" in cmds[1][1]
+    assert [w for w, _ in sshops.manual_commands("root", line)] == ["as root"]
+    _run(tmp_path, cmds[0][1])
+    _run(tmp_path, cmds[0][1])
+    assert (tmp_path / ".ssh" / "authorized_keys").read_text().splitlines() == [line, line]
+    assert oct((tmp_path / ".ssh").stat().st_mode)[-3:] == "700"
+
+
+def test_add_host_by_hand_with_certificates(app_module, logged_in, monkeypatch):
+    """Add host, CA line added by hand: "Already authorized" with certificates ticked saves login cert and checks it"""
+    from app import dockerops, sshhosts, sshops
+    page = logged_in.post("/ssh/new/form", data={"alias": "handbox", "hostname": "h.example.test", "user": "pi"}).text
+    monkeypatch.setattr(sshops, "cert_login", lambda alias: (True, ""))
+    monkeypatch.setattr(dockerops, "ssh_check", lambda alias, sudo="": (0, f"pi@{alias}\n"))
+    try:
+        html = logged_in.post("/ssh/new/deploy", data={"alias": "handbox", "hostname": "h.example.test", "user": "pi",
+                                                       "port": "22", "access": "confirm", "mode": "skip", "cert": "1"}).text
+        assert "Logs in with a certificate" in html
+        h = sshhosts.get("handbox")
+        assert (h["auth"], h["principal"]) == ("cert", "tentaclai-handbox")
+    finally:
+        sshhosts.remove("handbox")
+    assert page  # the form step renders
+
+
+def test_deploy_step_shows_both_manual_commands(app_module, logged_in, monkeypatch):
+    from app import sshops
+    monkeypatch.setattr(sshops, "trust", lambda token: None)
+    html = logged_in.post("/ssh/new/trust", data={"alias": "nas", "hostname": "nas.example.test", "user": "admin", "token": "x"}).text
+    assert 'principals=&#34;tentaclai-nas&#34;' in html or 'principals="tentaclai-nas"' in html
+    assert "as admin" in html and "as root" in html and 'id="man-key" hidden' in html

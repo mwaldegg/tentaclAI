@@ -74,17 +74,30 @@
   <div class="field"><label>Password of {{ f.user }} (used once, never stored)</label>
     <input type="password" name="password" autocomplete="new-password">
     <div class="help">tentaclAI logs in once with this password and appends its key to <code>~/.ssh/authorized_keys</code>.</div></div>
-  <label class="check" style="margin-bottom:12px"><input type="checkbox" name="cert" value="1" checked>
+  {% if manual_ca %}
+  <label class="check" style="margin-bottom:12px"><input type="checkbox" name="cert" value="1" checked
+    onchange="document.getElementById('man-ca').hidden=!this.checked;document.getElementById('man-key').hidden=this.checked">
     Log in with short-lived certificates (recommended) – the host trusts tentaclAI's CA for this host only, no permanent key on it</label>
+  {% endif %}
   <div class="row">
     <button class="btn primary" name="mode" value="password">{{ icon('key') }}Authorize</button>
-    <button class="btn" name="mode" value="skip" formnovalidate>The key is already there</button>
+    <button class="btn" name="mode" value="skip" formnovalidate>Already authorized</button>
     <span id="ssh-dlg-spin" class="spinner htmx-indicator"></span>
   </div>
-  <details class="small" style="margin-top:14px"><summary class="muted">No password login? Add the key by hand</summary>
-    <p>Run this on the host as {{ f.user }}, then click <em>The key is already there</em>:</p>
-    <pre class="rc" id="ssh-manual" style="white-space:pre-wrap;word-break:break-all">mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh &amp;&amp; echo '{{ pubkey }}' &gt;&gt; ~/.ssh/authorized_keys &amp;&amp; chmod 600 ~/.ssh/authorized_keys</pre>
-    <button type="button" class="btn sm" data-copy="#ssh-manual">{{ icon('copy') }}Copy</button>
+  <details class="small" style="margin-top:14px"><summary class="muted">No password login? Add it by hand</summary>
+    {% macro cmds(list, id) -%}
+      {% for who, cmd in list %}
+      <div class="card-head" style="margin-top:8px"><span>Run on the host {{ who }}:</span>
+        <button type="button" class="btn sm" data-copy="#{{ id }}-{{ loop.index }}">{{ icon('copy') }}Copy</button></div>
+      <pre class="rc" id="{{ id }}-{{ loop.index }}" style="white-space:pre-wrap;word-break:break-all">{{ cmd }}</pre>
+      {% endfor %}
+    {%- endmacro %}
+    {% if manual_ca %}<div id="man-ca">
+      <p>The CA line for the principal <code>{{ principal }}</code> – then click <em>Already authorized</em> (certificates stay ticked):</p>
+      {{ cmds(manual_ca, "man-ca-cmd") }}</div>{% endif %}
+    <div id="man-key" {{ 'hidden' if manual_ca }}>
+      <p>tentaclAI's key – then click <em>Already authorized</em>:</p>
+      {{ cmds(manual_key, "man-key-cmd") }}</div>
   </details>
 </form>
 
@@ -145,6 +158,11 @@
   <p class="small">With this line in <code>~/.ssh/authorized_keys</code> of {{ f.user }} the host takes tentaclAI's certificates for <code>{{ principal }}</code> – and only those.</p>
   <div class="card-head"><span></span><button class="btn sm" data-copy="#ca-host-line">{{ icon('copy') }}Copy</button></div>
   <pre class="rc" id="ca-host-line" style="white-space:pre-wrap;word-break:break-all">{{ line }}</pre>
+  {% for who, cmd in commands %}
+  <div class="card-head" style="margin-top:10px"><span class="small">Add it: run on the host {{ who }}</span>
+    <button class="btn sm" data-copy="#ca-cmd-{{ loop.index }}">{{ icon('copy') }}Copy</button></div>
+  <pre class="rc" id="ca-cmd-{{ loop.index }}" style="white-space:pre-wrap;word-break:break-all">{{ cmd }}</pre>
+  {% endfor %}
   <p class="help">Does the key line on the host carry options such as <code>from="…"</code>? Add them after the principal, separated by a comma. Then switch the host under <em>Login</em> – that step also adds this line by itself (keeping the options), so adding it by hand is only needed for a host tentaclAI can't log in to yet.</p>
   <div class="row" style="margin-top:12px">
     {% if f.auth != 'cert' %}<button class="btn primary" hx-get="/ssh/{{ alias }}/login" hx-target="#ssh-dlg-body">{{ icon('key') }}Login …</button>{% endif %}

@@ -43,6 +43,12 @@ def _ssh_fields(form):
 
 def _ssh_dialog(request, step, **ctx):
     ctx.setdefault("f", {})
+    if step == "deploy":  # the commands for adding the key or the CA line by hand
+        f = ctx["f"]
+        ctx["manual_key"] = sshops.manual_commands(f.get("user", ""), ctx.get("pubkey") or "")
+        if sshca.available() and tclib.ALIAS_RE.match(f.get("alias", "")):
+            ctx["principal"] = tclib.ssh_principal(f)
+            ctx["manual_ca"] = sshops.manual_commands(f.get("user", ""), sshca.authorized_line(ctx["principal"]))
     ctx.setdefault("hosts", sshhosts.hosts())
     ctx.setdefault("error", None)
     ctx.setdefault("this_host", read_env().get("TC_HOSTNAME") or "")
@@ -135,18 +141,18 @@ async def ssh_new_deploy(request: Request):
     form = await request.form()
     f = _ssh_fields(form)
     results = []
+    cert = bool(form.get("cert")) and sshca.available()
     if form.get("mode") == "password":
         if not form.get("password"):
-            return _ssh_dialog(request, "deploy", f=f, pubkey=sshhosts.public_key(), error="Enter the password, or use “The key is already there”.")
-        cert = bool(form.get("cert")) and sshca.available()
+            return _ssh_dialog(request, "deploy", f=f, pubkey=sshhosts.public_key(), error="Enter the password, or use “Already authorized”.")
         try:
             state = await asyncio.to_thread(sshops.deploy, f, form.get("password"), cert)
         except (RuntimeError, ValueError) as e:
             return _ssh_dialog(request, "deploy", f=f, pubkey=sshhosts.public_key(), error=str(e))
         what = "CA line (certificates)" if cert else "Key"
         results.append((True, f"{what} added to authorized_keys" if state == "added" else f"{what} was already authorized"))
-        if cert:
-            f.update(auth="cert", principal=tclib.ssh_principal(f))
+    if cert:  # also with "Already authorized": the CA line was added by hand
+        f.update(auth="cert", principal=tclib.ssh_principal(f))
     try:
         if not sshhosts.get(f["alias"]):
             sshhosts.add(f)
@@ -236,7 +242,9 @@ async def ssh_caline(request: Request, alias: str):
     if not sshca.available():
         return _ssh_dialog(request, "result", title="No CA", results=[(False, "the volume ssh-ca is missing – run docker compose up -d in the stack directory")])
     principal = tclib.ssh_principal(h)
-    return _ssh_dialog(request, "caline", alias=alias, f=h, principal=principal, line=sshca.authorized_line(principal))
+    line = sshca.authorized_line(principal)
+    return _ssh_dialog(request, "caline", alias=alias, f=h, principal=principal, line=line,
+                       commands=sshops.manual_commands(h["user"], line))
 
 
 @router.post("/ssh/{alias}/login/cert", response_class=HTMLResponse)

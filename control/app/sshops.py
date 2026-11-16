@@ -154,6 +154,20 @@ def install_key(alias):
     _on_host(alias, install_key_script(pub, _ca_body()), "TC_KEY_ADDED")
 
 
+def manual_commands(user, line):
+    """(who, command) to put one line into the user's authorized_keys by hand: as the user, and – for another user –
+    as root"""
+    q = shlex.quote(line)
+    own = (f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo {q} >> ~/.ssh/authorized_keys && "
+           "chmod 600 ~/.ssh/authorized_keys")
+    cmds = [(f"as {user}", own)]
+    if user != "root" and tclib.USER_RE.match(user or ""):
+        h = f"$(getent passwd {user} | cut -d: -f6)"
+        cmds.append(("as root", f"h={h} && install -d -m 700 -o {user} \"$h/.ssh\" && echo {q} >> \"$h/.ssh/authorized_keys\" && "
+                                f"chown {user} \"$h/.ssh/authorized_keys\" && chmod 600 \"$h/.ssh/authorized_keys\""))
+    return cmds
+
+
 def cert_login(alias):
     """(ok, last line): does the host take tentaclAI's certificate? A fresh connection with ssh -v – ok only when the
     server accepted the certificate (not the key)"""
