@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Every release lists **upgrade steps** from the previous one.
 
+## Unreleased
+
+### Changes / fixes
+
+### Upgrade
+
 ## v0.25.0 – 2026-11-16
 
 ### Changes / fixes
