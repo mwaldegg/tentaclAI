@@ -2,7 +2,7 @@
 
 All notable changes, newest first. Every release lists **upgrade steps** from the previous one.
 
-## Unreleased
+## v0.26.0 – 2026-11-17
 
 ### Changes / fixes
 - **SSH certificates instead of a permanent key** – per host (SSH hosts → *Login*): tentacontrol runs a small SSH CA
