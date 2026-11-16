@@ -269,7 +269,7 @@ A service file can combine any of these parts:
 
 | Part | Fields | Access control |
 |---|---|---|
-| `api` | `base_url`, `auth.type`: `none` · `bearer` · `header` · `basic` · `query` · `oauth2_client_credentials`; `insecure_tls`; `access` (default `write`) | writes = everything but GET/HEAD/OPTIONS |
+| `api` | `base_url`, `auth.type`: `none` · `bearer` · `header` · `basic` · `query` · `oauth2_client_credentials`; `insecure_tls`; `access` (default `write`); `read_calls` | writes = everything but GET/HEAD/OPTIONS and the `read_calls` |
 | `mcp` | like Claude's `.mcp.json`: `http` (`url`, `headers`) or `stdio` (`command`, `args`, `env`); `access` (default `read`), `read_tools` / `write_tools` | tools the server marks read-only run freely; every other tool call is a write |
 | `git` | `url`, `access`, `auth` (token via credential helper) | `read`: push blocked (pushurl + pre-push hook) |
 | `docker` | `mode` `ssh` (the only one): `ssh_host`, `stacks_dir`; `access` | `read`: only read-only docker/compose commands |
@@ -287,6 +287,12 @@ verification for that part only – the connection stays encrypted (also for `mc
 every write wait for your approval in tentacontrol → **Approvals** (denied or no answer within 10 minutes = not executed).
 The names before v0.16, `ro` and `rw`, still work as `read` and `write`; tentacontrol rewrites them on start (with a
 backup) and only writes the new ones. An unknown value counts as `read`.
+**API calls that only read** although they are not a GET (search and query endpoints, Home Assistant's
+`?return_response` services) can be listed in the `api` part: `"read_calls": ["POST /search", "POST /services/*/get_*?return_response"]`.
+They run like a GET – on `read`, in read-only jobs and without approval on `confirm`, logged as reads and checked by the
+injection hook. Method and the whole path with its query must match; `*` stands for any text inside one path segment
+or query value (never `/`, `?`, `&`, `=`). Paths with `..` or encoded dots/slashes and calls with `-G` never count as
+read calls. List only calls that really change nothing – svc trusts the list.
 **MCP tool calls** go through the same gate: every MCP server is registered in Claude as `svc mcp-proxy <name>` (http
 bridged with the tokens added, stdio as a child process run by the service's own user), which sees each tool call. When an
 http server restarts and forgets the session, the proxy connects again on its own and tells Claude to fetch the tool list
@@ -507,10 +513,6 @@ log and a faster first setup.
   in the audit log.
 - **AI Assist for jobs:** describe what a job should do and Claude drafts it in the editor – task, schedule,
   profile, the tentacles it names and when to warn – or improves an existing one; you check and save it.
-- **Read-only POST calls without approval:** some APIs only read through POST (Home Assistant
-  `POST /services/todo/get_items?return_response`, search and query endpoints). A service file can list such
-  method + path patterns as reads, so they run without approval on a `confirm` part – every other POST keeps
-  waiting for approval as it does now.
 
 ## License
 

@@ -135,6 +135,9 @@ def cmd_info(services, name):
         auth = api.get("auth", {"type": "none"})
         detail = auth.get("header") or auth.get("param") or ""
         print(f"API:  {core.render(api.get('base_url', ''))}  (Auth: {auth.get('type')}{', ' + detail if detail else ''})")
+        reads = api_part.read_call_patterns(api)
+        if reads:
+            print(f"Read calls (no approval): {', '.join(reads)}")
         if api.get("docs"):
             print(f"Docs: {api['docs']}")
     mcp = svc.get("mcp")

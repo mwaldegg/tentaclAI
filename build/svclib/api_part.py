@@ -58,7 +58,7 @@ def cmd_call(services, name, method, path, extra):
             sys.exit(f"svc: {unreadable[0]} is not readable by the user curl runs as ({core.run_user(name)}) – pass the "
                      "body inline (--data-binary \"$(cat file)\") or make the file readable for everyone (chmod a+r, "
                      "in a directory others may enter)")
-        if method.upper() in ("GET", "HEAD", "OPTIONS"):
+        if method.upper() in ("GET", "HEAD", "OPTIONS") or is_read_call(api, method, path, extra):
             rc = safeguards.scanned("API response", name, "api", f"{method.upper()} {path}", cmd + list(extra), **core.runner(name))
         else:
             body = " (with body)" if any(a in ("-d", "--data", "--data-raw", "--data-binary", "--json", "-F", "--form", "-T") for a in extra) else ""
@@ -72,6 +72,47 @@ def cmd_call(services, name, method, path, extra):
     finally:
         for f in files:
             os.unlink(f)
+
+
+# ---------- read calls ----------
+# Some APIs read through POST (search, query, Home Assistant's ?return_response). "read_calls" in the api part lists
+# them as "METHOD /path" – they run like a GET: on read, in read-only jobs and without approval on confirm. The whole
+# path with its query must match; * stands for any text inside one path segment or query value (never / ? & # =).
+
+def read_call_patterns(api):
+    v = api.get("read_calls")
+    return [str(x).strip() for x in v if isinstance(x, str) and x.strip()] if isinstance(v, list) else []
+
+
+def _read_call_regex(pattern):
+    return re.compile("".join("[^/?&#=]*" if c == "*" else re.escape(c) for c in pattern))
+
+
+def is_read_call(api, method, path, extra=()):
+    """whether a call that would be a write is listed as a read in read_calls. Never for a path with dot segments or
+    encoded dots/slashes/backslashes (curl or the server would resolve them to another path) or with -G (it moves the
+    body into the query)"""
+    m, p = method.upper(), "/" + path.lstrip("/")
+    route = p.split("?", 1)[0]
+    if re.search(r"%2e|%2f|%5c|\\", p, re.I) or any(seg in (".", "..") for seg in route.split("/")):
+        return False
+    if any(a == "--get" or (a.startswith("-") and not a.startswith("--") and "G" in _short_flags(a)) for a in extra):
+        return False
+    for pat in read_call_patterns(api):
+        pm, _, pp = pat.partition(" ")
+        if pm.upper() == m and pp.strip() and _read_call_regex("/" + pp.strip().lstrip("/")).fullmatch(p):
+            return True
+    return False
+
+
+def _short_flags(arg):
+    """the flag letters of a bundled short option (-sSG) – up to the first one that takes a value (-dG is -d with "G")"""
+    out = ""
+    for c in arg[1:]:
+        if "-" + c in CURL_VALUES:
+            break
+        out += c
+    return out
 
 
 # curl options svc passes on: the request's body, headers, output and timing. Not the method (-X: the write gate

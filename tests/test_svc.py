@@ -1311,6 +1311,54 @@ def test_api_unreadable_body_file_stops_before_the_approval(monkeypatch):
     assert approvals == ["POST /x (with body)"] and calls[-1][0] == "curl"
 
 
+HA_READS = {"read_calls": ["POST /services/todo/get_items?return_response", "post search/*", "POST /q?term=*", 3, ""]}
+
+
+@pytest.mark.parametrize("method, path, extra, read", [
+    ("POST", "/services/todo/get_items?return_response", [], True),
+    ("post", "services/todo/get_items?return_response", ["-d", "{}"], True),
+    ("POST", "/services/todo/get_items", [], False),                          # the query is part of the match
+    ("POST", "/services/todo/get_items?return_response&x=1", [], False),
+    ("PUT", "/services/todo/get_items?return_response", [], False),           # other method
+    ("POST", "/search/docs", [], True),
+    ("POST", "/search/docs/delete", [], False),                               # * stays inside one segment
+    ("POST", "/search/..", [], False),                                        # dot segments are resolved elsewhere
+    ("POST", "/search/%2e%2e", [], False),
+    ("POST", "/search/a%2Fdelete", [], False),
+    ("POST", "/search/a\\b", [], False),
+    ("POST", "/q?term=abc", [], True),
+    ("POST", "/q?term=a&delete=1", [], False),                                # * never crosses & or =
+    ("POST", "/q?term=abc", ["-G", "-d", "x=1"], False),                      # -G moves the body into the query
+    ("POST", "/q?term=abc", ["-sSG"], False),
+    ("POST", "/q?term=abc", ["--get"], False),
+    ("POST", "/q?term=abc", ["-dG"], True),                                   # -d with the body "G"
+])
+def test_api_read_calls(method, path, extra, read):
+    assert svc.is_read_call(HA_READS, method, path, extra) is read
+
+
+def test_api_read_calls_need_a_list():
+    assert not svc.is_read_call({"read_calls": "POST /x"}, "POST", "/x")
+    assert not svc.is_read_call({}, "POST", "/x")
+
+
+@pytest.mark.parametrize("access", ["read", "confirm"])
+def test_api_read_call_runs_without_the_write_gate(monkeypatch, access):
+    """a listed read call runs like a GET (scanned, no approval) – also on read; an unlisted POST still goes to the gate"""
+    services = {"ha": {"name": "ha", "api": {"base_url": "https://ha.example.com/api", "access": access, **HA_READS}}}
+    monkeypatch.setattr(svc, "require_allowed", lambda name: None)
+    monkeypatch.setattr(svc, "_shm_file", lambda content, service: "/dev/null")
+    monkeypatch.setattr("os.unlink", lambda f: None)
+    monkeypatch.setattr(svc, "runner", lambda service, env=None: {})
+    reads, gated = [], []
+    monkeypatch.setattr(svc, "scanned", lambda source, name, part, action, cmd, **kw: reads.append(action) or 0)
+    monkeypatch.setattr(svc, "guarded", lambda name, part, mode, action, run, **kw: gated.append((mode, action)) or 0)
+    assert svc.cmd_call(services, "ha", "POST", "/services/todo/get_items?return_response", ["-d", "{}"]) == 0
+    assert reads == ["POST /services/todo/get_items?return_response"] and gated == []
+    svc.cmd_call(services, "ha", "POST", "/services/todo/add_item", ["-d", "{}"])
+    assert gated == [(access, "POST /services/todo/add_item (with body)")]
+
+
 def test_api_path_and_config_values_refuse_line_breaks():
     """a line break in a curl config file starts a new option (url = …, then proxy = or header = from Claude)"""
     assert "control character" in svc.curl_args_error("/x\nproxy = http://evil", [])

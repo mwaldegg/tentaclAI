@@ -197,7 +197,7 @@
       <div class="muted" style="margin-top:8px">
         <code>docker</code> {mode ssh, ssh_host, stacks_dir, access read|write|confirm}, <code>smtp</code> / <code>imap</code> {host, security, user, password, …} (see Help → Mail),
         <code>api.base_url</code>, <code>api.auth.type</code> = <code>none</code> | <code>bearer {token}</code> | <code>header {header, value}</code> | <code>basic {user, password}</code> | <code>query {param, value}</code> | <code>oauth2_client_credentials {token_url, client_id, client_secret, scope}</code>,
-        <code>insecure_tls</code> (in api, mcp, git, db, web, smtp, imap), <code>api.docs</code>, <code>mcp</code> (like <code>.mcp.json</code>: <code>type</code> http/sse + <code>url</code>/<code>headers</code> or stdio + <code>command</code>/<code>args</code>/<code>env</code>),
+        <code>insecure_tls</code> (in api, mcp, git, db, web, smtp, imap), <code>api.docs</code>, <code>api.read_calls</code> (calls that only read although not GET, e.g. <code>"POST /search"</code>), <code>mcp</code> (like <code>.mcp.json</code>: <code>type</code> http/sse + <code>url</code>/<code>headers</code> or stdio + <code>command</code>/<code>args</code>/<code>env</code>),
         <code>git</code> {url, access, branch, path, auth, author {name, email}}, <code>examples</code>, <code>notes</code>, <code>test_path</code>, <code>enabled</code>. Secrets only as <code>${VAR}</code>.
       </div>
     </details>

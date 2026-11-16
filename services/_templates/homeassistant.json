@@ -11,7 +11,11 @@
       "type": "bearer",
       "token": "${HA_TOKEN}"
     },
-    "docs": "https://developers.home-assistant.io/docs/api/rest/"
+    "docs": "https://developers.home-assistant.io/docs/api/rest/",
+    "read_calls": [
+      "POST /services/*/get_*?return_response",
+      "POST /template"
+    ]
   },
   "mcp": {
     "type": "http",
@@ -23,7 +27,8 @@
   },
   "test_path": "/",
   "examples": [
-    "svc NAME GET /states/sun.sun"
+    "svc NAME GET /states/sun.sun",
+    "svc NAME POST '/services/todo/get_items?return_response' -d '{\"entity_id\": \"todo.shopping_list\"}'"
   ],
   "notes": [
     "MCP needs the HA integration “Model Context Protocol Server”."

@@ -5,8 +5,19 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **API calls that only read run without approval** – `"read_calls"` in the `api` part lists calls that read although
+  they are not a GET, e.g. `"POST /services/*/get_*?return_response"` for Home Assistant or `"POST /search"`. They run
+  like a GET: on `read`, in read-only jobs and on `confirm` without approval, logged as reads and scanned by the
+  injection hook; every other POST still waits for approval. Method, path and query must match, `*` stays inside one
+  path segment or query value; paths with `..` or encoded dots/slashes and calls with `-G` never count. `svc info`
+  and the service page's field list show them; the Home Assistant template lists its `get_*` services and
+  `POST /template`.
 
 ### Upgrade
+- `git pull`, `docker compose build`, `docker compose up -d` – tentacontrol and the sandbox (`svc`) change:
+  recreating `tentaclai` ends running sessions and Remote Control. Existing service files are unchanged – add
+  `"read_calls"` to an `api` part where you want such calls to run without approval (the template only applies to new
+  services).
 
 ## v0.25.0 – 2026-11-16
 
