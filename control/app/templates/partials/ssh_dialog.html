@@ -74,8 +74,10 @@
   <div class="field"><label>Password of {{ f.user }} (used once, never stored)</label>
     <input type="password" name="password" autocomplete="new-password">
     <div class="help">tentaclAI logs in once with this password and appends its key to <code>~/.ssh/authorized_keys</code>.</div></div>
+  <label class="check" style="margin-bottom:12px"><input type="checkbox" name="cert" value="1" checked>
+    Log in with short-lived certificates (recommended) – the host trusts tentaclAI's CA for this host only, no permanent key on it</label>
   <div class="row">
-    <button class="btn primary" name="mode" value="password">{{ icon('key') }}Deploy key</button>
+    <button class="btn primary" name="mode" value="password">{{ icon('key') }}Authorize</button>
     <button class="btn" name="mode" value="skip" formnovalidate>The key is already there</button>
     <span id="ssh-dlg-spin" class="spinner htmx-indicator"></span>
   </div>
@@ -110,12 +112,40 @@
   </div>
 </form>
 
+{% elif step == "login" %}
+  {{ head("Login on " ~ alias, f.user ~ "@" ~ f.hostname) }}
+  {% if f.auth == 'cert' %}
+  <p class="small">tentaclAI logs in with <strong>certificates</strong>: before each connection tentacontrol signs a fresh key for the principal <code>{{ principal }}</code>, valid {{ minutes }} min (Settings → SSH). The host trusts the CA through a <code>cert-authority</code> line in <code>~/.ssh/authorized_keys</code>; every certificate is in the audit log.</p>
+  <form hx-post="/ssh/{{ alias }}/login/cert" hx-target="#ssh-dlg-body" hx-indicator="#ssh-dlg-spin">
+    <input type="hidden" name="remove_key" value="1">
+    <div class="row">
+      <button class="btn">{{ icon('trash') }}Remove the permanent key from the host</button>
+      <button type="button" class="btn ghost" hx-post="/ssh/{{ alias }}/login/key" hx-target="#ssh-dlg-body" hx-indicator="#ssh-dlg-spin">Back to the key</button>
+      <span id="ssh-dlg-spin" class="spinner htmx-indicator"></span>
+    </div>
+  </form>
+  <p class="help">While the key is still on the host it is the fallback when tentacontrol can't sign (stopped, CA volume missing). Removing it makes the certificates the only way in.</p>
+  {% elif not ca_ok %}
+  <div class="alert warn">No CA volume: tentacontrol needs the volume <code>ssh-ca</code> (<code>compose.yaml</code> of this version) – run <code>docker compose up -d</code> in the stack directory.</div>
+  {% else %}
+  <p class="small">tentaclAI logs in with its <strong>key</strong> <code>tentaclai_ed25519</code>, which is authorized on the host for good. With certificates the host trusts tentaclAI's CA for the principal <code>{{ principal }}</code> only; each connection gets a certificate valid {{ minutes }} min, and each one is in the audit log.</p>
+  <form hx-post="/ssh/{{ alias }}/login/cert" hx-target="#ssh-dlg-body" hx-indicator="#ssh-dlg-spin">
+    <label class="check" style="margin-bottom:12px"><input type="checkbox" name="remove_key" value="1">
+      Then remove the permanent key from the host (only if the certificate works)</label>
+    <div class="row">
+      <button class="btn primary">{{ icon('key') }}Switch to certificates</button>
+      <span id="ssh-dlg-spin" class="spinner htmx-indicator"></span>
+    </div>
+  </form>
+  <p class="help">tentaclAI logs in with the key once, adds the <code>cert-authority</code> line (keeping options like <code>from=</code> of its key line), then checks a login with a certificate – if the host doesn't take it, everything goes back to the key.</p>
+  {% endif %}
+
 {% elif step == "remove" %}
 <form hx-post="/ssh/{{ alias }}/remove" hx-target="#ssh-dlg-body" hx-indicator="#ssh-dlg-spin">
   {{ head("Remove " ~ alias) }}
   {% if refs %}<div class="alert warn">Still used by {% for k, n in refs %}{{ k }} <strong>{{ n }}</strong>{{ ', ' if not loop.last }}{% endfor %} – they will stop working until you point them to another host.</div>{% endif %}
   <label class="check" style="margin-bottom:12px"><input type="checkbox" name="unauthorize" value="1" checked>
-    Also remove tentaclAI's key from {{ f.user }}@{{ f.hostname }}</label>
+    Also remove tentaclAI's {{ 'CA line and key' if f.auth == 'cert' else 'key' }} from {{ f.user }}@{{ f.hostname }}</label>
   <div class="row">
     <button class="btn danger">{{ icon('trash') }}Remove</button>
     {% if error %}<button class="btn" name="force" value="1">Remove entry only</button>{% endif %}

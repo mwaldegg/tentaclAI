@@ -123,7 +123,7 @@ The stack consists of **three containers** and one **stack directory**:
 | **`svc`** (inside tentaclAI) | The gateway Claude uses for every service: `svc <name> GET /path`, `svc docker`, `svc compose`, `svc db`, `svc web`, `svc files`, `svc mail`, `svc git`, `svc jobs`. It runs as root (via sudo), injects credentials from `.env` at call time and enforces `read`/`write`/`confirm`; Claude itself runs as user `claude` and can't read `.env` or the SSH key. |
 | **Services** (`services/<name>.json`) | One file per thing Claude may reach. A service can combine parts: `api`, `mcp`, `git`, `docker`, `db`, `web`, `files`, `smtp`, `imap`. Secrets are `${VAR}` placeholders, the values live in `.env`. |
 | **Systems** (`systems/<name>.json`) | Optional groups – e.g. *the NAS* = its SSH host + Docker + a database + an API – with a shared SSH host and rules that apply to every member. Services can also stand alone. |
-| **SSH hosts** (`ssh/config.d/*.conf`) | Machines reachable with tentaclAI's own key, optionally with a sudo prefix for non-root users. Docker and file services use them. |
+| **SSH hosts** (`ssh/config.d/*.conf`) | Machines reachable with tentaclAI's own key or with short-lived certificates from tentacontrol's SSH CA, optionally with a sudo prefix for non-root users. Docker and file services use them. |
 | **Site knowledge** | Claude's instructions are assembled on every start from generic rules, an optional host document, `local/CLAUDE.md` (your site rules) and generated tables of Docker and SSH hosts. A service catalog (`/workspace/SERVICES.md`) lists every service, system and rule. Claude keeps it up to date itself: what it learns while working, or what you tell it (also as the reason of a denial), it proposes as a note where it applies – service, system or site rules – always through an approval that shows the diff. |
 
 **Generic by design.** Code, templates and examples are the same for every installation. Everything site-specific lives in
@@ -318,6 +318,22 @@ SSH hosts: tentacontrol → Tentacles → SSH hosts, or `./ssh-host.sh list|add|
 `./ssh-host.sh add nas admin@nas.lan --jump gate --sudo`); jump hosts via `ProxyJump`; the sudo prefix is stored as
 `# tentaclai: sudo=sudo -n` in the host block and needs passwordless sudo, ideally limited to what Claude needs.
 
+**SSH certificates instead of a permanent key** (per host, tentacontrol → SSH hosts → *Login*): tentacontrol runs a
+small SSH CA and signs a fresh key pair before each connection, valid for `SSH_CERT_MINUTES` (default 5, 1–60) and only
+for the host's principal (`tentaclai-<alias>`). The host trusts the CA through one line in the user's
+`~/.ssh/authorized_keys` – `cert-authority,principals="tentaclai-<alias>" ssh-ed25519 …` – no `sshd_config` change,
+no restart. *Switch to certificates* adds that line (logging in with the key once, keeping options like `from=` of
+the key line), checks a certificate login and, if you tick it, removes the key from the host; if the host doesn't take
+the certificate, everything goes back to the key. New hosts can be authorized with certificates right away (*Add host*,
+step 3). Every certificate is in the audit log (`SSH certificate #<serial> for tentaclai-<alias>`); revoking means
+removing the CA line from the host. How it works: the host's `# tentaclai: auth=cert` makes tentaclAI write a
+`Match originalhost <alias> exec "tc-cert <alias>"` block into `ssh/config.d/_certs.conf`; `tc-cert` (root in the
+sandbox) asks tentacontrol for a certificate with svc's token and keeps it in `ssh/certs/` while it stays valid. If
+tentacontrol can't sign, ssh falls back to the key – as long as it is still on the host. The CA's private key lives in
+the Docker volume `ssh-ca`, which only tentacontrol mounts: the sandbox (which sees the stack directory) never has it.
+**Back up that volume** (`docker run --rm -v tentaclai_ssh-ca:/ca -v "$PWD":/b alpine tar czf /b/ssh-ca.tgz -C /ca .`)
+– without it, hosts on certificates need the CA line again (switch them back to the key and over again).
+
 ## Configuration
 
 | Variable (`.env`) | Meaning |
@@ -475,7 +491,11 @@ What tentaclAI does:
   created on first use) with only that service's secret – one service's tool can't read another's environment,
   secret files or cookie jars. Every MCP server runs behind `svc mcp-proxy`, git pushes go through a root-owned mirror – Claude never sees a
   token or the private key, and can't change its own access modes (`svc config put` always needs your approval).
-- **tentacontrol is out of Claude's reach:** from the sandbox only `svc`'s endpoints for approvals and job proposals answer
+- **SSH certificates** (per host): no permanent credential on the host – each connection gets a certificate valid for
+  minutes, for that host's principal only, signed by a CA whose key the sandbox never sees (Docker volume `ssh-ca`).
+  Root in the sandbox can still ask for certificates while it runs (like it can use the key today) – but nothing it
+  takes away lasts, and every certificate is logged.
+- **tentacontrol is out of Claude's reach:** from the sandbox only `svc`'s endpoints for approvals, job proposals and SSH certificates answer
   (with its token; an unrecognised address from the sandbox network counts as the sandbox);
   the admin UI, the login and the gateway's endpoints refuse the sandbox, and only the gateway may use the latter.
 - **Other services' secrets are blanked in read-only output:** `docker … inspect`, `compose … config` and
@@ -507,10 +527,6 @@ What it does **not** (yet) do – keep it in mind:
 fixes, but no new features for now. Development concentrates on the sandbox, `svc`, the egress gateway, the audit
 log and a faster first setup.
 
-- **Short-lived SSH certificates:** instead of one permanent key authorized on every host, tentaclAI runs a small
-  SSH CA and signs a certificate per call or session, valid for minutes and limited to the host and principal it
-  needs; hosts trust the CA once (`TrustedUserCAKeys`), revoking means removing the CA, and every certificate is
-  in the audit log.
 - **AI Assist for jobs:** describe what a job should do and Claude drafts it in the editor – task, schedule,
   profile, the tentacles it names and when to warn – or improves an existing one; you check and save it.
 

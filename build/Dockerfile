@@ -60,7 +60,7 @@ ARG CACHE_BUST=0
 RUN echo "cache bust: ${CACHE_BUST}" && npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && npm cache clean --force
 
-COPY build/entrypoint.sh build/start.sh build/rc-loop build/cc build/svc build/claude-instructions build/tc-scan build/tc-statusline build/tc-connect build/tc-guard build/tc-shot /usr/local/bin/
+COPY build/entrypoint.sh build/start.sh build/rc-loop build/cc build/svc build/claude-instructions build/tc-scan build/tc-statusline build/tc-connect build/tc-guard build/tc-shot build/tc-cert /usr/local/bin/
 COPY lib/tclib.py /usr/local/lib/tentaclai/tclib.py
 COPY build/svclib/ /usr/local/lib/tentaclai/svclib/
 RUN python3 -m compileall -q /usr/local/lib/tentaclai
@@ -80,7 +80,7 @@ RUN groupadd -g ${CLAUDE_UID} claude && useradd -m -d /home/claude -u ${CLAUDE_U
         'Defaults:claude env_keep += "CLAUDE_CODE_SESSION_ID CLAUDE_CODE_ENTRYPOINT TMUX TMUX_PANE"' \
         'claude ALL=(root) NOPASSWD: /usr/local/bin/svc, /usr/local/bin/tc-scan' > /etc/sudoers.d/tentaclai \
     && chmod 0440 /etc/sudoers.d/tentaclai && visudo -cq
-RUN chmod 0755 /usr/local/bin/entrypoint.sh /usr/local/bin/start.sh /usr/local/bin/rc-loop /usr/local/bin/cc /usr/local/bin/svc /usr/local/bin/claude-instructions /usr/local/bin/tc-scan /usr/local/bin/tc-statusline /usr/local/bin/tc-connect /usr/local/bin/tc-guard /usr/local/bin/tc-shot \
+RUN chmod 0755 /usr/local/bin/entrypoint.sh /usr/local/bin/start.sh /usr/local/bin/rc-loop /usr/local/bin/cc /usr/local/bin/svc /usr/local/bin/claude-instructions /usr/local/bin/tc-scan /usr/local/bin/tc-statusline /usr/local/bin/tc-connect /usr/local/bin/tc-guard /usr/local/bin/tc-shot /usr/local/bin/tc-cert \
     # the browser works: Node (both launch paths) and Python render a page
     && tc-shot --selftest \
     && python3 -c 'from playwright.sync_api import sync_playwright as p; b = p().start().chromium.launch(); print("✓ python:", b.version); b.close()' \

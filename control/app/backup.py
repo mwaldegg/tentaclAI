@@ -392,9 +392,11 @@ def apply(doc, picked):
                 if r["status"] == "new":
                     sshhosts.add(fields)
                 else:
-                    f = os.path.join(sshhosts.CONF_D, sshhosts.get(key)["file"])
+                    cur = sshhosts.get(key)
+                    f = os.path.join(sshhosts.CONF_D, cur["file"])
                     _backup(f, stamp)
-                    sshhosts.update(key, fields)
+                    # the login (key or this installation's certificates) is local – not in an export, kept on import
+                    sshhosts.update(key, dict(fields, auth=cur.get("auth", "key"), principal=cur.get("principal", "")))
             elif sec == "systems":
                 _backup(systems_store.path_of(key), stamp)
                 systems_store.save_raw(key, doc["systems"][key])

@@ -2,7 +2,8 @@
 
 tentacontrol sits in the sandbox network because svc (in the sandbox) asks it for approvals – which also put the admin
 UI, the login and the gateway endpoints within Claude's reach. Requests are classified by their source address:
-  sandbox container → only the svc endpoints (/internal/approvals…, /internal/event, /internal/jobs…; they also need the svc token)
+  sandbox container → only the svc endpoints (/internal/approvals…, /internal/event, /internal/jobs…, /internal/ssh-cert;
+                      they also need the svc token)
   egress gateway    → only /internal/egress/*
   anyone else       → everything except /internal/egress/* (UI and login still need the password)
 The containers are found by name in Docker's DNS, so a recreated container with a new address is recognised. Any
@@ -20,7 +21,7 @@ from . import dockerops
 from .config import CLAUDE_CONTAINER
 
 EGRESS_NAME = "egress"  # network alias of the gateway in the sandbox network
-SANDBOX_PATHS = ("/internal/approvals", "/internal/event", "/internal/jobs")
+SANDBOX_PATHS = ("/internal/approvals", "/internal/event", "/internal/jobs", "/internal/ssh-cert")
 _cache = {}  # name -> (ts, set of addresses)
 
 

@@ -5,7 +5,7 @@
 {% block content %}
 {{ conn_tabs("ssh") }}
 <div class="header">
-  <div><h1>SSH targets</h1><div class="sub">One file per host in <code>ssh/config.d/</code>, own key <code>tentaclai_ed25519</code></div></div>
+  <div><h1>SSH targets</h1><div class="sub">One file per host in <code>ssh/config.d/</code> – login with tentaclAI's key or with short-lived certificates</div></div>
   <div class="row">
     <button class="btn primary" hx-get="/ssh/new" hx-target="#ssh-dlg-body" onclick="document.getElementById('dlg-ssh').showModal()">{{ icon('plus') }}Add host</button>
     <button class="btn" onclick="document.getElementById('dlg-pubkey').showModal()">{{ icon('key') }}Public key</button>
@@ -16,7 +16,7 @@
     <h2>Hosts</h2>
     {% if hosts %}
     <div class="table-wrap"><table>
-      <thead><tr><th>Alias</th><th>Target</th><th>Shell</th><th>sudo</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>Alias</th><th>Target</th><th>Login</th><th>Shell</th><th>sudo</th><th>File</th><th></th></tr></thead>
       <tbody>
       {% for h in hosts %}
         <tr>
@@ -25,6 +25,8 @@
             <strong>{{ h.alias }}</strong></span></td>
           <td class="mono small">{{ h.user }}@{{ h.hostname }}{% if h.port != '22' %}:{{ h.port }}{% endif %}{% if h.proxyjump %} <span class="pill info">via {{ h.proxyjump }}</span>{% endif %}
             <div class="ssh-result" id="t-{{ loop.index }}"></div></td>
+          <td><button class="btn sm ghost" title="Change how tentaclAI logs in" hx-get="/ssh/{{ h.alias }}/login" hx-target="#ssh-dlg-body" onclick="document.getElementById('dlg-ssh').showModal()">
+            {% if h.auth == 'cert' %}<span class="pill ok">certificate</span>{% else %}<span class="pill off">key</span>{% endif %}</button></td>
           <td><span class="pill {{ 'warn' if h.access == 'write' else ('off' if h.access == 'read' else 'info') }}" title="svc ssh access">{{ h.access }}</span></td>
           <td>
             <details class="sudo-edit">
@@ -58,6 +60,12 @@
     <button class="btn sm ghost" onclick="this.closest('dialog').close()" aria-label="Close">✕</button></div></div>
   <pre class="rc" id="pubkey" style="word-break:break-all">{{ pubkey or "– no key found –" }}</pre>
       <p class="help">For adding it to <code>authorized_keys</code> on a target by hand.</p>
+  {% if ca_line %}
+  <div class="card-head" style="margin-top:14px"><h2>Certificate authority</h2>
+    <button class="btn sm" data-copy="#caline">{{ icon('copy') }}Copy</button></div>
+  <pre class="rc" id="caline" style="word-break:break-all">cert-authority,principals="tentaclai-&lt;alias&gt;" {{ ca_line }}</pre>
+  <p class="help">For a host that should take certificates: this line in <code>authorized_keys</code> (with the host's alias in the principal) – then switch the host to <em>certificate</em>. <em>Login</em> in the table does both for you.</p>
+  {% endif %}
 </dialog>
 <script>
   // close a dialog by clicking the backdrop

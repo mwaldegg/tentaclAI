@@ -4,7 +4,11 @@ import json
 import secrets
 import time
 
-from . import dockerops, services_store, sshhosts, systems_store
+import shlex
+
+import tclib
+
+from . import dockerops, services_store, sshca, sshhosts, systems_store
 
 _PENDING = {}  # token -> scanned host key, valid for 10 minutes
 SSH_BASE = ["-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ConnectTimeout=10"]
@@ -53,12 +57,16 @@ def trust(token):
         raise RuntimeError(f"could not store the host key: {out.strip()[-200:]}")
 
 
-def deploy(fields, password):
-    """append the public key on the target, logging in once with a password (passed via stdin, never stored)"""
-    pub = sshhosts.public_key()
-    if not pub:
-        raise RuntimeError("public key ssh/keys/tentaclai_ed25519.pub missing")
-    body = pub.split()[1]
+def deploy(fields, password, cert=False):
+    """append the public key – or with cert the CA line for the host's principal – on the target, logging in once with
+    a password (passed via stdin, never stored)"""
+    if cert:
+        pub = sshca.authorized_line(tclib.ssh_principal(fields))
+    else:
+        pub = sshhosts.public_key()
+        if not pub:
+            raise RuntimeError("public key ssh/keys/tentaclai_ed25519.pub missing")
+    body = pub.split()[-2]
     remote = ("umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; "
               f"grep -qF '{body}' ~/.ssh/authorized_keys && echo TC_ALREADY || "
               f"{{ echo '{pub}' >> ~/.ssh/authorized_keys && echo TC_ADDED; }}")
@@ -74,16 +82,85 @@ def deploy(fields, password):
     raise RuntimeError(f"could not deploy the key: {reason}")
 
 
-def unauthorize(alias):
-    """remove tentaclAI's key from the target (logs in with that key one last time)"""
+def _key_body():
     pub = sshhosts.public_key() or ""
-    body = pub.split()[1] if len(pub.split()) > 1 else ""
-    if not body:
-        raise RuntimeError("public key missing")
-    remote = (f"f=~/.ssh/authorized_keys; [ -f $f ] || exit 0; grep -vF '{body}' $f > $f.tc; cat $f.tc > $f; rm -f $f.tc; echo TC_REMOVED")
-    code, out = dockerops.sandbox_exec(["ssh", "-o", "BatchMode=yes"] + SSH_BASE + [alias, remote], timeout=30)
-    if "TC_REMOVED" not in out:
+    return pub.split()[1] if len(pub.split()) > 1 else ""
+
+
+def _ca_body():
+    return sshca.public_line().split()[1]
+
+
+def _on_host(alias, remote, marker):
+    """run one of our own scripts on the host as tentaclAI (key or certificate, whatever the host uses now)"""
+    code, out = dockerops.sandbox_exec(["ssh", "-o", "BatchMode=yes"] + SSH_BASE + [alias, remote], timeout=40)
+    if marker not in out:
         raise RuntimeError((out.strip().splitlines() or ["ssh failed"])[-1][:200])
+    return out
+
+
+def unauthorize(alias, key=True, ca=True):
+    """remove tentaclAI's key and/or the CA line from the target (logs in one last time)"""
+    bodies = ([_key_body()] if key else []) + ([_ca_body()] if ca and sshca.available() else [])
+    bodies = [b for b in bodies if b]
+    if not bodies:
+        raise RuntimeError("public key missing")
+    _on_host(alias, unauthorize_script(bodies), "TC_REMOVED")
+
+
+def unauthorize_script(bodies):
+    pats = " ".join(f"-e {shlex.quote(b)}" for b in bodies)
+    return (f"f=~/.ssh/authorized_keys; [ -f $f ] || {{ echo TC_REMOVED; exit 0; }}; "
+            f"grep -vF {pats} $f > $f.tc; cat $f.tc > $f; rm -f $f.tc; echo TC_REMOVED")
+
+
+# the options of an existing line (from="…", command=…) are carried over to the line that replaces it – a restriction
+# set up for tentaclAI's key stays in place for its certificates and back. Values reach the remote shell only as
+# quoted assignments (shlex.quote); the scripts use plain sh, grep and sed.
+_KEY_OPTS = r"s/^\(.*[^ ]\)  *ssh-ed25519 [^ ]*.*/\1/p"            # options before the key, if any
+_CA_OPTS = r"s/^cert-authority,principals=[^, ]*,\(.*[^ ]\)  *ssh-ed25519 .*/\1/p"  # options after the principal
+
+
+def install_ca_script(key_body, ca_line, principal):
+    """the script that puts the CA line on a host: drop an older CA line, keep the key line's options"""
+    if not tclib.PRINCIPAL_RE.match(principal):
+        raise RuntimeError("bad principal")
+    return (f"umask 077; mkdir -p ~/.ssh; f=~/.ssh/authorized_keys; touch $f; "
+            f"k={shlex.quote(key_body or '-none-')}; c={shlex.quote(ca_line.split()[1])}; ca={shlex.quote(ca_line)}; "
+            f"p={shlex.quote(principal)}; "
+            f"o=$(grep -F -e \"$k\" $f | sed -n {shlex.quote(_KEY_OPTS)} | head -1); "
+            f"grep -vF -e \"$c\" $f > $f.tc; cat $f.tc > $f; rm -f $f.tc; "
+            "printf 'cert-authority,principals=\"%s\"%s %s\\n' \"$p\" \"${o:+,$o}\" \"$ca\" >> $f; echo TC_CA_ADDED")
+
+
+def install_key_script(pub, ca_body):
+    """the script that puts tentaclAI's key back on a host, with the CA line's options"""
+    return (f"umask 077; mkdir -p ~/.ssh; f=~/.ssh/authorized_keys; touch $f; "
+            f"c={shlex.quote(ca_body)}; pub={shlex.quote(pub)}; k={shlex.quote(pub.split()[1])}; "
+            f"o=$(grep -F -e \"$c\" $f | sed -n {shlex.quote(_CA_OPTS)} | head -1); "
+            "grep -qF -e \"$k\" $f || printf '%s%s\\n' \"${o:+$o }\" \"$pub\" >> $f; echo TC_KEY_ADDED")
+
+
+def install_ca(alias, principal):
+    """put the CA line for this principal on the host (replacing an older one); logs in as the host is set up now"""
+    _on_host(alias, install_ca_script(_key_body(), sshca.public_line(), principal), "TC_CA_ADDED")
+
+
+def install_key(alias):
+    """put tentaclAI's key back on the host (switching back from certificates)"""
+    pub = sshhosts.public_key()
+    if not pub:
+        raise RuntimeError("public key ssh/keys/tentaclai_ed25519.pub missing")
+    _on_host(alias, install_key_script(pub, _ca_body()), "TC_KEY_ADDED")
+
+
+def cert_login(alias):
+    """(ok, last line): does the host take tentaclAI's certificate? A fresh connection with ssh -v – ok only when the
+    server accepted the certificate (not the key)"""
+    code, out = dockerops.sandbox_exec(["ssh", "-v", "-o", "BatchMode=yes"] + SSH_BASE + [alias, "true"], timeout=40)
+    accepted = any("Server accepts key:" in l and "-CERT" in l for l in out.splitlines())
+    errors = [l for l in out.splitlines() if l.strip() and not l.startswith("debug")]
+    return code == 0 and accepted, (errors[-1] if errors else "the host did not accept the certificate")[:200]
 
 
 def references(alias):

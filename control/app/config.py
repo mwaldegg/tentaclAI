@@ -58,6 +58,10 @@ SETTINGS_GROUPS = [
         ("APPROVAL_HANDOFF", "Show the approval link in the chat after (s)",
          "a Claude session waits this long for an approval, then svc hands the request back and Claude posts its link in the chat (a running command shows nothing there, e.g. Remote Control in the browser) and waits again for the same request. Default 30, 0 = wait silently", "text"),
     ]),
+    ("SSH", [
+        ("SSH_CERT_MINUTES", "Certificate lifetime (min)",
+         "hosts with login “certificate”: how long each signed certificate is valid, 1–60 (default 5) – needed only to log in", "text"),
+    ]),
     ("Jobs", [
         ("JOB_READONLY_HELPERS", "Helpers in read-only jobs",
          "commands besides svc a read-only job may run, comma-separated – text tools only (e.g. head, grep, jq); svc still guards every tentacle. Empty = the defaults (shown greyed out in the field). Shells, interpreters, awk/sed/find/xargs and network or write tools are refused.", "text"),

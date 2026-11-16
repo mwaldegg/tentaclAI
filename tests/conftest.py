@@ -21,7 +21,7 @@ STACK = tempfile.mkdtemp(prefix="tcquick-")
 os.environ["TZ"] = "UTC"  # session timestamps and the usage page use the same day
 time.tzset()
 os.environ.update(STACK_DIR=STACK, DATA_DIR=os.path.join(STACK, "data", "control"), VENDOR_DIR=os.path.join(STACK, "vendor"),
-                  CLAUDE_CONTAINER="tcquick-none")
+                  CLAUDE_CONTAINER="tcquick-none", SSH_CA_DIR=os.path.join(STACK, "ssh-ca"))
 
 
 def _stack():

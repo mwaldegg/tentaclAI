@@ -25,6 +25,7 @@ ssh/keys/
 ssh/known_hosts
 ssh/known_hosts.old
 ssh/cm-*
+ssh/certs/
 ssh/config.d/*
 !ssh/config.d/example.conf.example
 

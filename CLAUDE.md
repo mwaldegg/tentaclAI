@@ -60,6 +60,14 @@ same check. Sign-in through the server: `central.sso_start/sso_finish` (signed a
 `auth.is_central`), `central.local_sign_in()` applies the *Enterprise only* policy and the emergency access
 (`breakglass.json`, `passwd.py --open`).
 
+**SSH certificates:** hosts with `# tentaclai: auth=cert` trust tentacontrol's CA (`control/app/sshca.py`, key in the
+volume `ssh-ca` – never in the stack directory, the sandbox sees that) for their principal (`tclib.ssh_principal`, stored
+with the host so a rename keeps it). `tclib.ssh_cert_conf` rewrites `ssh/config.d/_certs.conf` (one `Match originalhost
+<alias> exec "tc-cert <alias>"` block per host) on every host change and clears `ssh/certs/` of hosts that left;
+`build/tc-cert` gets a certificate from `/internal/ssh-cert` (svc token) for a fresh key and keeps it while it is valid.
+Switching and the host-side scripts (`install_ca_script`, `install_key_script`, `unauthorize_script`) are in
+`control/app/sshops.py`, tests in `tests/test_sshca.py` and the sandbox test's svc section.
+
 Two layers: `svc` decides *what* happens with a tentacle (credentials, `read`/`write`/`confirm`); the gateway decides *where*
 the sandbox may connect. ssh/rsync go through `ProxyCommand tc-connect`, databases and mail through `svc`'s local `tunnel()`.
 

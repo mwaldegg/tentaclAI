@@ -373,6 +373,21 @@ check "rename: working copy" "$($C sh -c '[ -d /workspace/repos/gitdemo2/.git ] 
 check "rename: mirror" "$(docker exec tctest-claude sh -c '[ -d /root/.cache/tentaclai/git/gitdemo2.git ] && [ ! -e /root/.cache/tentaclai/git/gitdemo.git ] && echo moved')" "moved"
 check "rename: example follows" "$(grep -c 'svc git fetch gitdemo2' services/gitdemo2.json)" "1"
 check "rename: repo still works" "$($C svc git fetch gitdemo2 >/dev/null 2>&1 && echo ok)" "ok"
+# SSH certificates: tentacontrol puts its CA line on the host, checks a certificate login, removes the key – then svc
+# logs in with certificates only; and back to the key (the host is shared with the checks above on a REUSE run)
+CERT=$(curl -s -b "$J" -H "$H" -X POST "http://$IP:8080/ssh/testssh/login/cert" -d remove_key=1)
+check "certificates: the host takes the certificate" "$(echo "$CERT" | grep -c 'Login with a certificate works' || true)" "1"
+check "certificates: the permanent key is off the host" "$(echo "$CERT" | grep -c 'Permanent key removed' || true)" "1"
+check "certificates: svc ssh logs in with one" "$($C svc ssh testssh echo cert-ok 2>&1 | tail -1)" "cert-ok"
+KEYONLY() { docker exec tctest-claude ssh -F /dev/null -i /root/.ssh/keys/tentaclai_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes \
+    -o ProxyCommand='tc-connect %h %p' -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 deploy@tctest-sshd true >/dev/null 2>&1 && echo yes || echo no; }
+check "certificates: the key alone gets no login" "$(KEYONLY)" "no"
+check "certificates: each one is in the audit log" "$(docker exec tctest-claude grep -c '"action": "SSH certificate #[0-9]* for tentaclai-testssh' "$T/data/control/audit.jsonl" | grep -qv '^0$' && echo yes || echo no)" "yes"
+check "certificates: Claude can't ask for one" "$($C curl -s -m 5 --noproxy '*' -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"alias":"testssh"}' http://tctest-control:8080/internal/ssh-cert 2>/dev/null || true)" "403"
+check "certificates: the CA key is not in the sandbox" "$(docker exec tctest-claude sh -c "find / -xdev -name 'ca_ed25519*' 2>/dev/null; find '$T' -name 'ca_ed25519*' 2>/dev/null" | grep -c . || true)" "0"
+BACK=$(curl -s -b "$J" -H "$H" -X POST "http://$IP:8080/ssh/testssh/login/key")
+check "certificates: back to the key" "$(echo "$BACK" | grep -c 'CA line removed from the host' || true)" "1"
+check "… the key logs in again" "$(KEYONLY)" "yes"
 fi
 
 if want egress; then

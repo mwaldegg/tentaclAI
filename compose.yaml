@@ -127,6 +127,8 @@ services:
       - ./data/control:/data
       # destinations seen by the egress gateway (read only)
       - egress-data:/egress:ro
+      # the SSH CA's private key – in a volume of its own: the sandbox sees the stack directory, never this
+      - ssh-ca:/ssh-ca
     deploy:
       resources:
         limits:
@@ -142,3 +144,4 @@ networks:
 
 volumes:
   egress-data: {}
+  ssh-ca: {}

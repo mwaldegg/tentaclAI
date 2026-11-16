@@ -8,18 +8,31 @@ import time
 import tclib
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
-from .. import dockerops, scheduled, services_store, sshhosts, sshops
+from .. import dockerops, scheduled, services_store, sshca, sshhosts, sshops
 from ..envfile import read_env
 from ..web import page, respond, sync_services, templates
 
 router = APIRouter()
 
 
+@router.post("/internal/ssh-cert")
+async def internal_ssh_cert(request: Request):
+    """tc-cert in the sandbox: a certificate for a fresh key pair, for a host with login "cert" (svc token required)"""
+    d = await request.json()
+    try:
+        cert, before = await asyncio.to_thread(sshca.issue, str(d.get("alias", "")), str(d.get("public_key", "")),
+                                               d.get("origin") if isinstance(d.get("origin"), dict) else None)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"certificate": cert, "valid_before": before})
+
+
 @router.get("/ssh", response_class=HTMLResponse)
 async def ssh_page(request: Request):
-    return page(request, "ssh.html", hosts=sshhosts.hosts(), pubkey=sshhosts.public_key())
+    return page(request, "ssh.html", hosts=sshhosts.hosts(), pubkey=sshhosts.public_key(),
+                ca_line=sshca.public_line() if sshca.available() else None)
 
 
 def _ssh_fields(form):
@@ -125,17 +138,24 @@ async def ssh_new_deploy(request: Request):
     if form.get("mode") == "password":
         if not form.get("password"):
             return _ssh_dialog(request, "deploy", f=f, pubkey=sshhosts.public_key(), error="Enter the password, or use “The key is already there”.")
+        cert = bool(form.get("cert")) and sshca.available()
         try:
-            state = await asyncio.to_thread(sshops.deploy, f, form.get("password"))
-        except RuntimeError as e:
+            state = await asyncio.to_thread(sshops.deploy, f, form.get("password"), cert)
+        except (RuntimeError, ValueError) as e:
             return _ssh_dialog(request, "deploy", f=f, pubkey=sshhosts.public_key(), error=str(e))
-        results.append((True, "Key added to authorized_keys" if state == "added" else "Key was already authorized"))
+        what = "CA line (certificates)" if cert else "Key"
+        results.append((True, f"{what} added to authorized_keys" if state == "added" else f"{what} was already authorized"))
+        if cert:
+            f.update(auth="cert", principal=tclib.ssh_principal(f))
     try:
         if not sshhosts.get(f["alias"]):
             sshhosts.add(f)
     except ValueError as e:
         return _ssh_dialog(request, "form", f=f, error=str(e))
     results.append((True, f"Saved as ssh/config.d/{f['alias']}.conf"))
+    if f.get("auth") == "cert":
+        ok, why = await asyncio.to_thread(sshops.cert_login, f["alias"])
+        results.append((True, "Logs in with a certificate") if ok else (False, f"Certificate not accepted: {why}"))
     test, _ = await _ssh_test_results(f["alias"])
     if form.get("docker") and test and test[0][0] is True:
         test += await _docker_host(f["alias"])
@@ -196,6 +216,81 @@ async def ssh_hostkey_trust(request: Request, alias: str):
     test, hostkey = await _ssh_test_results(alias)
     return _ssh_dialog(request, "result", title=f"Host key of {alias} confirmed", results=[(True, "Host key stored")] + test,
                        hostkey_alias=alias if hostkey else None)
+
+
+@router.get("/ssh/{alias}/login", response_class=HTMLResponse)
+async def ssh_login(request: Request, alias: str):
+    h = sshhosts.get(alias)
+    if not h:
+        return _ssh_dialog(request, "result", title="Not found", results=[(False, f"host {alias} not found")])
+    return _ssh_dialog(request, "login", alias=alias, f=h, principal=tclib.ssh_principal(h), ca_ok=sshca.available(),
+                       minutes=sshca.minutes())
+
+
+@router.post("/ssh/{alias}/login/cert", response_class=HTMLResponse)
+async def ssh_login_cert(request: Request, alias: str):
+    """key → certificates: CA line on the host (logging in with the key), login "cert", check that the host takes the
+    certificate – else back to the key; then optionally the key off the host"""
+    form = await request.form()
+    h = sshhosts.get(alias)
+    if not h or not sshca.available():
+        return _ssh_dialog(request, "result", title="Not possible", results=[(False, "host not found or no CA volume")])
+    principal = tclib.ssh_principal(h)
+    results = []
+    if h.get("auth") != "cert":
+        try:
+            await asyncio.to_thread(sshops.install_ca, alias, principal)
+        except RuntimeError as e:
+            return _ssh_dialog(request, "result", title=f"{alias}: still the key",
+                               results=[(False, f"Could not put the CA line on the host: {e}")])
+        results.append((True, f"CA line for principal {principal} added to {h['user']}@{h['hostname']}"))
+        sshhosts.update(alias, dict(h, auth="cert", principal=principal))
+    ok, why = await asyncio.to_thread(sshops.cert_login, alias)
+    if not ok:
+        sshhosts.update(alias, dict(h, auth="key", principal=principal))
+        try:
+            await asyncio.to_thread(sshops.unauthorize, alias, False, True)
+        except RuntimeError:
+            pass
+        return _ssh_dialog(request, "result", title=f"{alias}: still the key",
+                           results=results + [(False, f"The host did not accept the certificate ({why}) – back to the key")])
+    results.append((True, "Login with a certificate works"))
+    if form.get("remove_key"):
+        try:
+            await asyncio.to_thread(sshops.unauthorize, alias, True, False)
+            results.append((True, "Permanent key removed from the host"))
+            ok, why = await asyncio.to_thread(sshops.cert_login, alias)
+            results.append((True, "Still logs in with a certificate") if ok else (False, f"Login failed after removing the key: {why}"))
+        except RuntimeError as e:
+            results.append((False, f"Could not remove the key: {e}"))
+    _SSH_STATUS.clear()
+    return _ssh_dialog(request, "result", title=f"{alias} logs in with certificates", results=results)
+
+
+@router.post("/ssh/{alias}/login/key", response_class=HTMLResponse)
+async def ssh_login_key(request: Request, alias: str):
+    """certificates → key: key back on the host (logging in with a certificate), login "key", check, CA line off"""
+    h = sshhosts.get(alias)
+    if not h or h.get("auth") != "cert":
+        return _ssh_dialog(request, "result", title="Not possible", results=[(False, f"{alias} does not use certificates")])
+    try:
+        await asyncio.to_thread(sshops.install_key, alias)
+    except RuntimeError as e:
+        return _ssh_dialog(request, "result", title=f"{alias}: still certificates", results=[(False, f"Could not put the key on the host: {e}")])
+    sshhosts.update(alias, dict(h, auth="key"))
+    test, _ = await _ssh_test_results(alias)
+    if not test or test[0][0] is not True:
+        sshhosts.update(alias, h)
+        return _ssh_dialog(request, "result", title=f"{alias}: still certificates",
+                           results=[(True, "Key added")] + test + [(False, "Login with the key failed – back to certificates")])
+    results = [(True, "Key added to the host"), (True, "Login with the key works")]
+    try:
+        await asyncio.to_thread(sshops.unauthorize, alias, False, True)
+        results.append((True, "CA line removed from the host"))
+    except RuntimeError as e:
+        results.append((None, f"CA line still on the host: {e}"))
+    _SSH_STATUS.clear()
+    return _ssh_dialog(request, "result", title=f"{alias} logs in with the key", results=results)
 
 
 @router.get("/ssh/{alias}/remove", response_class=HTMLResponse)

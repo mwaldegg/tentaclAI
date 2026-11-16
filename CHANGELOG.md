@@ -5,6 +5,15 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **SSH certificates instead of a permanent key** – per host (SSH hosts → *Login*): tentacontrol runs a small SSH CA
+  and signs a fresh key pair before each connection, valid for `SSH_CERT_MINUTES` (Settings → SSH, default 5, 1–60)
+  and only for the host's principal `tentaclai-<alias>`. The host trusts the CA through one
+  `cert-authority,principals="…"` line in `~/.ssh/authorized_keys` – no `sshd_config` change, no restart. *Switch to
+  certificates* adds the line (keeping options like `from=` of the key line), checks a certificate login – or goes
+  back to the key – and can remove the key from the host; *Back to the key* reverses it. *Add host* can authorize a new
+  host with certificates right away. Every certificate is in the audit log. The CA key lives in the new Docker volume
+  `ssh-ca`, which only tentacontrol mounts – the sandbox never has it. As long as the key is still on a host it is the
+  fallback when tentacontrol can't sign. A configuration import keeps each host's login (it is not exported).
 - **API calls that only read run without approval** – `"read_calls"` in the `api` part lists calls that read although
   they are not a GET, e.g. `"POST /services/*/get_*?return_response"` for Home Assistant or `"POST /search"`. They run
   like a GET: on `read`, in read-only jobs and on `confirm` without approval, logged as reads and scanned by the
@@ -18,6 +27,10 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
   recreating `tentaclai` ends running sessions and Remote Control. Existing service files are unchanged – add
   `"read_calls"` to an `api` part where you want such calls to run without approval (the template only applies to new
   services).
+- `docker compose up -d` creates the volume `ssh-ca` for tentacontrol (both containers are recreated: `compose.yaml`
+  changed). Nothing changes for existing hosts – they keep the key until you switch them. **Back up the volume** once a
+  host uses certificates (README → Service reference → SSH certificates); `ssh/certs/` (the sandbox's certificate cache)
+  is git-ignored and needs no backup.
 
 ## v0.25.0 – 2026-11-16
 
