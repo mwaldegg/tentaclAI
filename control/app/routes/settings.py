@@ -145,9 +145,14 @@ async def settings_page(request: Request):
     for k in rest:
         if m := managed_elsewhere(k):
             elsewhere.setdefault(m[0], (m[1], []))[1].append(k)
-    from .. import scheduled
+    from .. import scheduled, sshca
     # shown greyed out in empty fields whose default lives in code
-    placeholders = {"JOB_READONLY_HELPERS": "default: " + ", ".join(scheduled.HELPERS_DEFAULT)}
+    placeholders = {"JOB_READONLY_HELPERS": "default: " + ", ".join(scheduled.HELPERS_DEFAULT),
+                    "SSH_CERT_MINUTES": f"default: {sshca.MINUTES_DEFAULT}",
+                    "APPROVAL_HANDOFF": f"default: {tclib.APPROVAL_HANDOFF}",
+                    "AUDIT_RETENTION_DAYS": f"default: {tclib.AUDIT_RETENTION_DAYS}",
+                    "KNOWLEDGE_LOCAL_KB": "default: 6", "KNOWLEDGE_NOTES": "default: 8",
+                    "RC_RESTART_DELAY": "default: 30", "CLAUDE_CPUS": "default: 4", "CLAUDE_MEMORY": "default: 8g"}
     return page(request, "settings.html", groups=SETTINGS_GROUPS, env=env, other=other, elsewhere=elsewhere,
                 placeholders=placeholders,
                 is_secret=services_store.secret_check())

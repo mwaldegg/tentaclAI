@@ -586,6 +586,7 @@ def test_settings_show_default_job_helpers(client):
     from app import scheduled
     html = client.get("/settings").text
     assert 'placeholder="default: ' + ", ".join(scheduled.HELPERS_DEFAULT) + '"' in html
+    assert 'name="k_SSH_CERT_MINUTES" value="" placeholder="default: 5"' in html
     assert html.count('class="field wide"') == 3  # APPROVAL_HANDOFF, JOB_READONLY_HELPERS, INJECTION_GUARD: long help, whole row
 
 
