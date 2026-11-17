@@ -5,6 +5,9 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **SSH → a failed certificate check no longer locks out a host already on certificates** – "Remove the permanent
+  key" on an unreachable host switched it back to a key the host may no longer accept; now it only reports the error
+  (#118, #119).
 
 ### Upgrade
 
