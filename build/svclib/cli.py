@@ -36,8 +36,6 @@ def cmd_version():
 
 
 def main(argv):
-    if argv[1:] in (["--version"], ["version"]):
-        return cmd_version()  # before elevate – the version file is world-readable, no sudo needed
     core.elevate()
     try:
         core.ORIG_CWD = os.getcwd()
@@ -173,6 +171,8 @@ def run(argv):
 def cli(argv, usage=None):
     global USAGE
     USAGE = usage or USAGE
+    if argv[1:] in (["--version"], ["version"]):
+        return cmd_version()  # no sudo (the file is world-readable) and no audit entry
     try:
         return run(argv)
     except BrokenPipeError:  # output piped into head & co., which stopped reading – end quietly like other CLI tools

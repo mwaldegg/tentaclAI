@@ -749,15 +749,16 @@ def test_help_prints_the_usage_of_the_entry_point(monkeypatch, capsys):
     assert "svc list" in out and "svc jobs" in out and "svc files" in out
 
 
-def test_version_prints_the_image_version_without_elevating(monkeypatch, capsys, tmp_path):
+def test_version_prints_the_image_version_without_elevating_or_audit(monkeypatch, capsys, tmp_path):
     from svclib import cli
     v = tmp_path / "VERSION"
     v.write_text("9.8.7\n")
     monkeypatch.setattr(cli, "VERSION_FILE", str(v))
     monkeypatch.setattr(svc.core, "elevate", lambda: (_ for _ in ()).throw(AssertionError("elevated")))
-    assert cli.main(["svc", "--version"]) == 0 and capsys.readouterr().out == "tentaclAI 9.8.7\n"
+    monkeypatch.setattr(cli, "read_entry", lambda *a: (_ for _ in ()).throw(AssertionError("audited")))
+    assert cli.cli(["svc", "--version"]) == 0 and capsys.readouterr().out == "tentaclAI 9.8.7\n"
     v.unlink()
-    assert cli.main(["svc", "version"]) == 1 and "unknown" in capsys.readouterr().out
+    assert cli.cli(["svc", "version"]) == 1 and "unknown" in capsys.readouterr().out
 
 
 def test_rules_say_svc_files_needs_a_files_service():
