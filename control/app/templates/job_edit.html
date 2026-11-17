@@ -28,9 +28,9 @@
       {% for h in job.prompt_history %}<div class="ja-row"><button type="button" class="btn sm ghost" data-restore-prompt="{{ h.prompt }}" title="Put this version into the field – save to keep it">Restore</button>
         <div style="min-width:0"><span class="faint">{{ fmt(h.ts) }}</span><div class="muted prompt-old">{{ h.prompt }}</div></div></div>{% endfor %}
     </details>{% endif %}</div>
-  <label class="check"><input type="checkbox" name="propose" value="1" {{ 'checked' if job.propose }}> Propose actions instead of changing anything (read-only profile) – the run suggests <code>svc</code> commands, you pick on this page which ones run</label>
-  <label class="check"><input type="checkbox" name="improve" value="1" {{ 'checked' if job.improve is not false }}> Suggest prompt improvements – when the task was unclear or lacked something the run had to find out, it proposes a better version; you take it with one click</label>
-  <label class="check"><input type="checkbox" name="scope" value="1" {{ 'checked' if job.scope }}> Only the tentacles named in the task (<code>@name</code> or an <code>svc</code> call like <code>svc mail box list</code>) – <code>svc</code> refuses every other one, MCP servers included</label>
+  <label class="check wrap"><input type="checkbox" name="propose" value="1" {{ 'checked' if job.propose }}> Propose actions instead of changing anything (read-only profile) – the run suggests <code>svc</code> commands, you pick on this page which ones run</label>
+  <label class="check wrap"><input type="checkbox" name="improve" value="1" {{ 'checked' if job.improve is not false }}> Suggest prompt improvements – when the task was unclear or lacked something the run had to find out, it proposes a better version; you take it with one click</label>
+  <label class="check wrap"><input type="checkbox" name="scope" value="1" {{ 'checked' if job.scope }}> Only the tentacles named in the task (<code>@name</code> or an <code>svc</code> call like <code>svc mail box list</code>) – <code>svc</code> refuses every other one, MCP servers included</label>
   {% if allowed is not none %}<div class="help" style="margin-top:-4px">This job may use: {% if allowed %}{% for n in allowed %}<code>{{ n }}</code>{{ ', ' if not loop.last }}{% endfor %}{% else %}nothing yet – name a tentacle in the task{% endif %} (as saved).</div>{% endif %}
 
   <div class="grid2">

@@ -123,6 +123,7 @@ textarea.fit { min-height: 0; resize: none; overflow: hidden; }  /* a key, code 
 .secret-row { display: flex; gap: 8px; align-items: center; }
 .secret-row input { flex: 1; }
 .check { display: inline-flex; gap: 6px; align-items: center; font-weight: 500; color: var(--muted); font-size: 12.5px; margin: 0; white-space: nowrap; }
+.check.wrap { white-space: normal; align-items: flex-start; } .check.wrap input { margin-top: 2px; flex: none; }  /* a label longer than a line */
 
 /* tables */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
