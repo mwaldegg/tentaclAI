@@ -196,6 +196,19 @@ def test_switch_to_certificates_and_back(certhost, logged_in, monkeypatch, takes
     assert calls == [("key", "certbox"), ("off", False, True)]
 
 
+def test_failed_check_on_a_cert_host_changes_nothing(certhost, logged_in, monkeypatch):
+    """a host already on certificates whose check fails (e.g. "Remove the permanent key" while it is unreachable)
+    stays on certificates – no switch back to a key it may no longer accept, the CA line stays"""
+    from app import sshhosts, sshops
+    sshhosts.update("certbox", dict(certhost, auth="cert", principal="tentaclai-certbox"))
+    calls = []
+    monkeypatch.setattr(sshops, "install_ca", lambda alias, p: calls.append(("ca", alias, p)))
+    monkeypatch.setattr(sshops, "unauthorize", lambda alias, key=True, ca=True: calls.append(("off", key, ca)))
+    monkeypatch.setattr(sshops, "cert_login", lambda alias: (False, "Connection timed out"))
+    html = logged_in.post("/ssh/certbox/login/cert", data={"remove_key": "1"}).text
+    assert "certificate check failed" in html and "back to the key" not in html
+    assert sshhosts.get("certbox")["auth"] == "cert" and calls == []
+
 def test_ca_line_per_host(certhost, logged_in):
     html = logged_in.get("/ssh/certbox/caline").text
     assert 'cert-authority,principals=&#34;tentaclai-certbox&#34; ssh-ed25519 ' in html or \

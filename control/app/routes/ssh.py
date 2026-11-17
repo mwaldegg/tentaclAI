@@ -257,7 +257,8 @@ async def ssh_login_cert(request: Request, alias: str):
         return _ssh_dialog(request, "result", title="Not possible", results=[(False, "host not found or no CA volume")])
     principal = tclib.ssh_principal(h)
     results = []
-    if h.get("auth") != "cert":
+    switching = h.get("auth") != "cert"
+    if switching:
         try:
             await asyncio.to_thread(sshops.install_ca, alias, principal)
         except RuntimeError as e:
@@ -266,6 +267,9 @@ async def ssh_login_cert(request: Request, alias: str):
         results.append((True, f"CA line for principal {principal} added to {h['user']}@{h['hostname']}"))
         sshhosts.update(alias, dict(h, auth="cert", principal=principal))
     ok, why = await asyncio.to_thread(sshops.cert_login, alias)
+    if not ok and not switching:  # already on certificates: nothing was switched, so nothing to roll back
+        return _ssh_dialog(request, "result", title=f"{alias}: certificate check failed",
+                           results=[(False, f"Login with a certificate failed ({why}) – nothing changed")])
     if not ok:
         sshhosts.update(alias, dict(h, auth="key", principal=principal))
         try:
