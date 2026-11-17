@@ -22,7 +22,22 @@ def cmd_rc_env():
     return 0
 
 
+VERSION_FILE = "/etc/tentaclai/VERSION"  # baked into the image (build/Dockerfile)
+
+
+def cmd_version():
+    try:
+        with open(VERSION_FILE) as f:
+            version = f.read().strip()
+    except OSError:
+        version = ""
+    print(f"tentaclAI {version or 'unknown'}")
+    return 0 if version else 1
+
+
 def main(argv):
+    if argv[1:] in (["--version"], ["version"]):
+        return cmd_version()  # before elevate – the version file is world-readable, no sudo needed
     core.elevate()
     try:
         core.ORIG_CWD = os.getcwd()

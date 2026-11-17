@@ -749,6 +749,17 @@ def test_help_prints_the_usage_of_the_entry_point(monkeypatch, capsys):
     assert "svc list" in out and "svc jobs" in out and "svc files" in out
 
 
+def test_version_prints_the_image_version_without_elevating(monkeypatch, capsys, tmp_path):
+    from svclib import cli
+    v = tmp_path / "VERSION"
+    v.write_text("9.8.7\n")
+    monkeypatch.setattr(cli, "VERSION_FILE", str(v))
+    monkeypatch.setattr(svc.core, "elevate", lambda: (_ for _ in ()).throw(AssertionError("elevated")))
+    assert cli.main(["svc", "--version"]) == 0 and capsys.readouterr().out == "tentaclAI 9.8.7\n"
+    v.unlink()
+    assert cli.main(["svc", "version"]) == 1 and "unknown" in capsys.readouterr().out
+
+
 def test_rules_say_svc_files_needs_a_files_service():
     # svc files only works for services with a files part – the rules must not send Claude there for any SSH host
     src = open(os.path.join(ROOT, "build", "claude-instructions")).read()

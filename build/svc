@@ -32,6 +32,7 @@ resolved from the stack's .env (read fresh on every call) and the container envi
   (access "read": only read-only docker/compose commands are allowed)
   svc audit [n] [--since 24h] [search]   audit log: words, field:value, -field:value (actor user source type target action outcome)
   (access "confirm": writes wait for the user's approval in tentacontrol → Approvals)
+  svc --version                    the tentaclAI version of this sandbox
   svc test <name>                  connection test of every part (api, mcp, git, docker, db, web, files)
   svc db [name] "<SQL>" | tables | describe <t> | shell    databases (postgres, mysql/mariadb); [--csv]
   svc web [name] [--links|--raw|--login] [path]          web sources: page as readable text, links, raw HTML

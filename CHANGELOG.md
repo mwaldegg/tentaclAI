@@ -5,8 +5,11 @@ All notable changes, newest first. Every release lists **upgrade steps** from th
 ## Unreleased
 
 ### Changes / fixes
+- **`svc --version`** prints the tentaclAI version of the sandbox (#116).
+- Long checkbox labels wrap (SSH dialogs, job editor).
 
 ### Upgrade
+- Rebuild the sandbox image (`svc --version` comes with it).
 
 ## v0.26.0 – 2026-11-17
 
